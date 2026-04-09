@@ -1,0 +1,143 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  USER
+  THEATER_ADMIN
+  SUPER_ADMIN
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  FAILED
+}
+
+enum SeatStatus {
+  AVAILABLE
+  LOCKED
+  BOOKED
+}
+
+enum SeatTier {
+  CLASSIC
+  PRIME
+  RECLINER
+}
+
+model User {
+  id            String    @id @default(uuid())
+  name          String
+  email         String    @unique
+  passwordHash  String
+  phone         String?
+  role          Role      @default(USER)
+  bookings      Booking[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model City {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  slug      String    @unique
+  theaters  Theater[]
+}
+
+model Theater {
+  id        String    @id @default(uuid())
+  name      String
+  location  String
+  cityId    String
+  city      City      @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  screens   Screen[]
+  createdAt DateTime  @default(now())
+}
+
+model Screen {
+  id          String      @id @default(uuid())
+  name        String      // e.g., Screen 1, Audi 2 (IMAX)
+  theaterId   String
+  theater     Theater     @relation(fields: [theaterId], references: [id], onDelete: Cascade)
+  seats       Seat[]
+  shows       Show[]
+  totalRows   Int
+  totalCols   Int
+}
+
+model Movie {
+  id          String    @id @default(uuid())
+  title       String
+  slug        String    @unique
+  description String
+  durationMin Int
+  language    String
+  format      String[]  // 2D, 3D, IMAX, 4DX
+  genre       String[]
+  posterUrl   String
+  trailerUrl  String?
+  releaseDate DateTime
+  shows       Show[]
+}
+
+model Seat {
+  id         String     @id @default(uuid())
+  screenId   String
+  screen     Screen     @relation(fields: [screenId], references: [id], onDelete: Cascade)
+  rowLabel   String     // A, B, C...
+  seatNumber Int        // 1, 2, 3...
+  tier       SeatTier   @default(CLASSIC)
+  showSeats  ShowSeat[]
+
+  @@unique([screenId, rowLabel, seatNumber])
+}
+
+model Show {
+  id          String      @id @default(uuid())
+  movieId     String
+  movie       Movie       @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  screenId    String
+  screen      Screen      @relation(fields: [screenId], references: [id], onDelete: Cascade)
+  startTime   DateTime
+  endTime     DateTime
+  basePrice   Decimal
+  showSeats   ShowSeat[]
+  bookings    Booking[]
+
+  @@index([movieId, startTime])
+}
+
+model ShowSeat {
+  id          String      @id @default(uuid())
+  showId      String
+  show        Show        @relation(fields: [showId], references: [id], onDelete: Cascade)
+  seatId      String
+  seat        Seat        @relation(fields: [seatId], references: [id], onDelete: Cascade)
+  status      SeatStatus  @default(AVAILABLE)
+  price       Decimal
+  bookingId   String?
+  booking     Booking?    @relation(fields: [bookingId], references: [id])
+
+  @@unique([showId, seatId])
+  @@index([showId, status])
+}
+
+model Booking {
+  id            String        @id @default(uuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id])
+  showId        String
+  show          Show          @relation(fields: [showId], references: [id])
+  totalAmount   Decimal
+  status        BookingStatus @default(PENDING)
+  paymentId     String?       @unique
+  qrCodeToken   String        @unique @default(uuid())
+  showSeats     ShowSeat[]
+  createdAt     DateTime      @default(now())
+}
