@@ -40,3 +40,28 @@ export interface MovieDetailsWithShows {
   movie: MovieCardData;
   theaters: TheaterShowSchedule[];
 }
+
+export interface MatrixSeat {
+  id: string;          // ShowSeat ID
+  seatId: string;      // Physical Seat ID
+  rowLabel: string;
+  seatNumber: number;
+  tier: SeatTier;
+  price: number;
+  status: SeatStatus;
+}
+
+export interface ShowDetailsWithMatrix {
+  showId: string;
+  movieTitle: string;
+  moviePosterUrl: string;
+  movieFormat: string[];
+  theaterName: string;
+  screenName: string;
+  location: string;
+  startTime: Date;
+  totalRows: number;
+  totalCols: number;
+  seatsByRow: Record<string, { tier: SeatTier; seats: MatrixSeat[] }>;
+  tierPricing: Record<SeatTier, number>;
+}
