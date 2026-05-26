@@ -1,7 +1,7 @@
 'use server';
 
 import { prisma } from '@/lib/prisma';
-import { ShowDetailsWithMatrix, MatrixSeat } from '@/types';
+import { ShowDetailsWithMatrix, MatrixSeat, CheckoutShowDetails } from '@/types';
 import { SeatTier, SeatStatus } from '@prisma/client';
 
 export async function getShowSeatMatrix(showId: string): Promise<ShowDetailsWithMatrix | null> {
@@ -78,6 +78,59 @@ export async function getShowSeatMatrix(showId: string): Promise<ShowDetailsWith
     };
   } catch (error) {
     console.error('Failed to get seat matrix:', error);
+    return null;
+  }
+}
+
+export async function getCheckoutDetails(
+  showId: string,
+  seatIds: string[]
+): Promise<CheckoutShowDetails | null> {
+  try {
+    const show = await prisma.show.findUnique({
+      where: { id: showId },
+      include: {
+        movie: true,
+        screen: {
+          include: {
+            theater: true,
+          },
+        },
+        showSeats: {
+          where: {
+            id: { in: seatIds },
+          },
+          include: {
+            seat: true,
+          },
+          orderBy: [
+            { seat: { rowLabel: 'asc' } },
+            { seat: { seatNumber: 'asc' } },
+          ],
+        },
+      },
+    });
+
+    if (!show || show.showSeats.length === 0) return null;
+
+    return {
+      showId: show.id,
+      movieTitle: show.movie.title,
+      moviePosterUrl: show.movie.posterUrl,
+      theaterName: show.screen.theater.name,
+      screenName: show.screen.name,
+      location: show.screen.theater.location,
+      startTime: show.startTime,
+      selectedSeats: show.showSeats.map((ss) => ({
+        id: ss.id,
+        rowLabel: ss.seat.rowLabel,
+        seatNumber: ss.seat.seatNumber,
+        tier: ss.seat.tier,
+        price: Number(ss.price),
+      })),
+    };
+  } catch (error) {
+    console.error('Failed to get checkout details:', error);
     return null;
   }
 }
