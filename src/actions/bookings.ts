@@ -106,3 +106,68 @@ export async function finalizeBookingAction(
     return null;
   }
 }
+
+export interface UserBookingHistoryItem {
+  id: string;
+  bookingRef: string;
+  status: BookingStatus;
+  totalAmount: number;
+  createdAt: Date;
+  movieTitle: string;
+  moviePoster: string;
+  format: string[];
+  theaterName: string;
+  screenName: string;
+  location: string;
+  startTime: Date;
+  seats: string[];
+}
+
+export async function getUserBookingsAction(
+  email: string = 'alex@cinevault.io'
+): Promise<UserBookingHistoryItem[]> {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) return [];
+
+    const bookings = await prisma.booking.findMany({
+      where: { userId: user.id },
+      include: {
+        show: {
+          include: {
+            movie: true,
+            screen: {
+              include: { theater: true },
+            },
+          },
+        },
+        showSeats: {
+          include: { seat: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return bookings.map((b) => ({
+      id: b.id,
+      bookingRef: `CV-${b.qrCodeToken.substring(0, 6).toUpperCase()}`,
+      status: b.status,
+      totalAmount: Number(b.totalAmount),
+      createdAt: b.createdAt,
+      movieTitle: b.show.movie.title,
+      moviePoster: b.show.movie.posterUrl,
+      format: b.show.movie.format,
+      theaterName: b.show.screen.theater.name,
+      screenName: b.show.screen.name,
+      location: b.show.screen.theater.location,
+      startTime: b.show.startTime,
+      seats: b.showSeats.map((ss) => `${ss.seat.rowLabel}${ss.seat.seatNumber}`),
+    }));
+  } catch (error) {
+    console.error('Failed to get user bookings:', error);
+    return [];
+  }
+}
