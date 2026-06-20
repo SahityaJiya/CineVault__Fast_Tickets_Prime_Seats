@@ -8,7 +8,7 @@ import { ArrowLeft } from 'lucide-react';
 interface ConfirmationPageProps {
   searchParams: Promise<{
     showId?: string;
-    seats?: string;
+    seatIds?: string;
     total?: string;
   }>;
 }
@@ -16,14 +16,14 @@ interface ConfirmationPageProps {
 export default async function BookingConfirmationPage({ searchParams }: ConfirmationPageProps) {
   const params = await searchParams;
   const showId = params.showId || '';
+  const seatIds = params.seatIds ? params.seatIds.split(',') : [];
   const totalAmount = Number(params.total) || 0;
 
   const cities = await getAvailableCities();
 
-  // Find show and materialize receipt
   const receipt = await finalizeBookingAction({
     showId,
-    seatIds: [], // Resolved inside action via show context
+    seatIds,
     totalAmount,
     customerEmail: 'alex@cinevault.io',
   });

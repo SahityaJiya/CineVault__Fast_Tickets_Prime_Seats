@@ -94,9 +94,9 @@ export default function CheckoutView({ details }: CheckoutViewProps) {
 
   const handleCompleteBooking = async () => {
     setIsProcessing(true);
-    // Simulate booking creation workflow
+    const seatIdList = details.selectedSeats.map((s) => s.id).join(',');
     setTimeout(() => {
-      router.push(`/booking/confirmation?showId=${details.showId}&seats=${details.selectedSeats.map((s) => `${s.rowLabel}${s.seatNumber}`).join(',')}&total=${grandTotal}`);
+      router.push(`/booking/confirmation?showId=${details.showId}&seatIds=${seatIdList}&total=${grandTotal}`);
     }, 1200);
   };
 

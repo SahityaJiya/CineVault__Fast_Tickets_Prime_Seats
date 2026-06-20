@@ -51,14 +51,21 @@ export async function finalizeBookingAction(
           include: { theater: true },
         },
         showSeats: {
-          where: seatIds.length > 0 ? { id: { in: seatIds } } : undefined,
+          where: {
+            id: { in: seatIds },
+          },
           include: { seat: true },
+          orderBy: [
+            { seat: { rowLabel: 'asc' } },
+            { seat: { seatNumber: 'asc' } },
+          ],
         },
       },
     });
 
-    if (!show) throw new Error('Show not found');
-
+    if (!show || show.showSeats.length === 0) {
+      return null;
+      }
     // Atomic transaction: Create booking, connect showSeats, and update seat status
     const booking = await prisma.$transaction(async (tx) => {
       const createdBooking = await tx.booking.create({
