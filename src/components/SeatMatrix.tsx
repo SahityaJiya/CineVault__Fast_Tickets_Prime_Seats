@@ -1,10 +1,23 @@
 'use client';
 
 import { useState } from 'react';
-import { ShowDetailsWithMatrix, MatrixSeat } from '@/types';
-import type { SeatTier, SeatStatus } from '@prisma/client';
-import { Armchair, CheckCircle2, ChevronRight, ShieldCheck } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
+import { ShowDetailsWithMatrix, MatrixSeat } from '@/types';
+
+export const SeatTier = {
+  CLASSIC: 'CLASSIC',
+  PRIME: 'PRIME',
+  RECLINER: 'RECLINER',
+} as const;
+export type SeatTier = (typeof SeatTier)[keyof typeof SeatTier];
+
+export const SeatStatus = {
+  AVAILABLE: 'AVAILABLE',
+  LOCKED: 'LOCKED',
+  BOOKED: 'BOOKED',
+} as const;
+export type SeatStatus = (typeof SeatStatus)[keyof typeof SeatStatus];
 
 interface SeatMatrixProps {
   data: ShowDetailsWithMatrix;
