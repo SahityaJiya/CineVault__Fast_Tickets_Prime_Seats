@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { ShowDetailsWithMatrix, MatrixSeat } from '@/types';
-import { SeatStatus, SeatTier } from '@prisma/client';
+import type { SeatTier, SeatStatus } from '@prisma/client';
 import { Armchair, CheckCircle2, ChevronRight, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 
