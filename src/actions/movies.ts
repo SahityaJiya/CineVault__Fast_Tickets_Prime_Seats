@@ -1,66 +1,91 @@
 'use server';
 
 import { prisma } from '@/lib/prisma';
-import { CityOption, MovieCardData, MovieDetailsWithShows, TheaterShowSchedule } from '@/types';
-import { SeatStatus } from '@prisma/client';
+
+export interface CityOption {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+export interface MovieCardData {
+  id: string;
+  title: string;
+  slug: string;
+  description: string;
+  durationMin: number;
+  language: string;
+  genre: string[];
+  posterUrl: string;
+  trailerUrl: string | null;
+  releaseDate: Date;
+  format: string[];
+}
 
 export async function getAvailableCities(): Promise<CityOption[]> {
   try {
     const cities = await prisma.city.findMany({
-      include: {
-        _count: {
-          select: { theaters: true },
-        },
-      },
       orderBy: { name: 'asc' },
     });
-
-    return cities.map((c) => ({
-      id: c.id,
-      name: c.name,
-      slug: c.slug,
-      theaterCount: c._count.theaters,
-    }));
+    return cities;
   } catch (error) {
     console.error('Failed to fetch cities:', error);
     return [];
   }
 }
 
-export async function getMoviesByCity(citySlug: string, filters?: {
-  genre?: string;
-  language?: string;
-  format?: string;
-}): Promise<MovieCardData[]> {
+export async function getMoviesByCity(
+  citySlug?: string,
+  searchQuery?: string,
+  genre?: string
+): Promise<MovieCardData[]> {
   try {
+    const cleanCitySlug =
+      citySlug && citySlug !== 'undefined' ? citySlug.toLowerCase() : 'bengaluru';
+
     const city = await prisma.city.findUnique({
-      where: { slug: citySlug },
+      where: { slug: cleanCitySlug },
     });
 
-    if (!city) return [];
+    const whereClause: any = {};
 
-    // Find all movies currently having active shows in theaters in this city
-    const movies = await prisma.movie.findMany({
-      where: {
-        shows: {
-          some: {
-            screen: {
-              theater: {
-                cityId: city.id,
-              },
-            },
-            startTime: {
-              gte: new Date(),
+    if (searchQuery && searchQuery.trim()) {
+      whereClause.OR = [
+        { title: { contains: searchQuery.trim(), mode: 'insensitive' } },
+        { language: { contains: searchQuery.trim(), mode: 'insensitive' } },
+      ];
+    }
+
+    if (genre && genre.trim()) {
+      whereClause.genre = {
+        has: genre.trim(),
+      };
+    }
+
+    // If city exists, filter to movies that have active screens/shows in that city
+    if (city) {
+      whereClause.shows = {
+        some: {
+          screen: {
+            theater: {
+              cityId: city.id,
             },
           },
         },
-        ...(filters?.genre ? { genre: { has: filters.genre } } : {}),
-        ...(filters?.language ? { language: filters.language } : {}),
-        ...(filters?.format ? { format: { has: filters.format } } : {}),
-      },
-      distinct: ['id'],
+      };
+    }
+
+    let movies = await prisma.movie.findMany({
+      where: whereClause,
       orderBy: { releaseDate: 'desc' },
     });
+
+    // Fallback: If city-specific shows query yields empty, return all matching movies
+    if (movies.length === 0 && !searchQuery && !genre) {
+      movies = await prisma.movie.findMany({
+        orderBy: { releaseDate: 'desc' },
+      });
+    }
 
     return movies;
   } catch (error) {
@@ -72,38 +97,32 @@ export async function getMoviesByCity(citySlug: string, filters?: {
 export async function getMovieShowtimes(
   movieSlug: string,
   citySlug: string,
-  targetDateStr?: string
-): Promise<MovieDetailsWithShows | null> {
+  targetDateStr: string
+) {
   try {
-    const movie = await prisma.movie.findUnique({
-      where: { slug: movieSlug },
-    });
+    const cleanCitySlug =
+      citySlug && citySlug !== 'undefined' ? citySlug.toLowerCase() : 'bengaluru';
 
-    if (!movie) return null;
+    const [movie, city] = await Promise.all([
+      prisma.movie.findUnique({
+        where: { slug: movieSlug },
+      }),
+      prisma.city.findUnique({
+        where: { slug: cleanCitySlug },
+      }),
+    ]);
 
-    const targetDate = targetDateStr ? new Date(targetDateStr) : new Date();
-    const startOfDay = new Date(targetDate);
-    startOfDay.setHours(0, 0, 0, 0);
+    if (!movie || !city) {
+      return null;
+    }
 
-    const endOfDay = new Date(targetDate);
-    endOfDay.setHours(23, 59, 59, 999);
+    const [year, month, day] = targetDateStr.split('-').map(Number);
+    const startOfDay = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
+    const endOfDay = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
 
     const theaters = await prisma.theater.findMany({
       where: {
-        city: { slug: citySlug },
-        screens: {
-          some: {
-            shows: {
-              some: {
-                movieId: movie.id,
-                startTime: {
-                  gte: startOfDay,
-                  lte: endOfDay,
-                },
-              },
-            },
-          },
-        },
+        cityId: city.id,
       },
       include: {
         screens: {
@@ -116,45 +135,41 @@ export async function getMovieShowtimes(
                   lte: endOfDay,
                 },
               },
-              include: {
-                showSeats: {
-                  where: { status: SeatStatus.AVAILABLE },
-                  select: { id: true },
-                },
+              orderBy: {
+                startTime: 'asc',
               },
-              orderBy: { startTime: 'asc' },
             },
           },
         },
       },
     });
 
-    const theaterSchedules: TheaterShowSchedule[] = theaters.map((t) => {
-      const allShows = t.screens.flatMap((screen) =>
-        screen.shows.map((show) => ({
-          id: show.id,
-          startTime: show.startTime,
-          endTime: show.endTime,
-          basePrice: Number(show.basePrice),
-          screenName: screen.name,
-          availableSeatsCount: show.showSeats.length,
-        }))
-      );
+    const theaterShowData = theaters
+      .map((theater) => {
+        const shows = theater.screens.flatMap((screen) =>
+          screen.shows.map((show) => ({
+            id: show.id,
+            startTime: show.startTime.toISOString(),
+            endTime: show.endTime.toISOString(),
+            basePrice: Number(show.basePrice),
+            screenName: screen.name,
+          }))
+        );
 
-      // Sort shows chronologically for this theater
-      allShows.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
-
-      return {
-        theaterId: t.id,
-        theaterName: t.name,
-        location: t.location,
-        shows: allShows,
-      };
-    });
+        return {
+          theaterId: theater.id,
+          theaterName: theater.name,
+          location: theater.location,
+          shows: shows.sort(
+            (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+          ),
+        };
+      })
+      .filter((t) => t.shows.length > 0);
 
     return {
       movie,
-      theaters: theaterSchedules,
+      theaters: theaterShowData,
     };
   } catch (error) {
     console.error('Failed to get movie showtimes:', error);

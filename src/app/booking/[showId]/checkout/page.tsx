@@ -16,7 +16,11 @@ import {
   Building2,
   Lock,
   CheckCircle2,
-  X
+  X,
+  Smartphone,
+  Wallet,
+  Zap,
+  Info
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -32,7 +36,7 @@ interface FoodItem {
 const FOOD_ITEMS: FoodItem[] = [
   {
     id: 'fnb-1',
-    name: 'Jumbo Butter Popcorn + Coke',
+    name: 'Jumbo Butter Popcorn + Large Coke',
     description: 'Fresh warm gourmet butter popcorn (180g) with 650ml chilled Coke.',
     price: 390,
     category: 'Combos',
@@ -40,15 +44,15 @@ const FOOD_ITEMS: FoodItem[] = [
   },
   {
     id: 'fnb-2',
-    name: 'Loaded Cheese Nachos',
-    description: 'Crispy corn tortilla chips served with warm jalapeño cheese dip and fresh salsa.',
+    name: 'Loaded Cheese Jalapeño Nachos',
+    description: 'Crispy Mexican corn tortilla chips served with warm salsa dip.',
     price: 280,
     category: 'Snacks',
     imageUrl: 'https://images.unsplash.com/photo-1513456852971-30c0b8199d4d?w=300&auto=format&fit=crop&q=80',
   },
   {
     id: 'fnb-3',
-    name: 'Caramel Crunch Popcorn',
+    name: 'Caramel Crunch Gourmet Popcorn',
     description: 'Signature large tub coated with slow-cooked rich artisan caramel.',
     price: 320,
     category: 'Snacks',
@@ -56,8 +60,8 @@ const FOOD_ITEMS: FoodItem[] = [
   },
   {
     id: 'fnb-4',
-    name: 'Cold Coffee Frappe',
-    description: '350ml whipped iced espresso blend with creamy chocolate drizzle.',
+    name: 'Chilled Cold Coffee Frappe',
+    description: 'Whipped iced espresso blend with creamy chocolate drizzle.',
     price: 240,
     category: 'Beverages',
     imageUrl: 'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?w=300&auto=format&fit=crop&q=80',
@@ -83,9 +87,13 @@ export default function CheckoutPage() {
   const [customerEmail, setCustomerEmail] = useState('');
   const [emailError, setEmailError] = useState('');
   
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'upi' | 'card' | 'netbanking'>('upi');
-  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  // Razorpay Simulation State
+  const [showRazorpayModal, setShowRazorpayModal] = useState(false);
+  const [rzpTab, setRzpTab] = useState<'upi' | 'card' | 'netbanking' | 'wallet'>('upi');
+  const [selectedUpiApp, setSelectedUpiApp] = useState<'gpay' | 'phonepe' | 'paytm' | 'qr'>('gpay');
+  const [selectedBank, setSelectedBank] = useState('HDFC Bank');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
 
   const handleAddItem = (id: string) => {
     setFnbCart((prev) => ({
@@ -115,31 +123,36 @@ export default function CheckoutPage() {
   const gst = Math.round((convenienceFee + fnbTotal) * 0.18);
   const grandTotal = ticketTotal + fnbTotal + convenienceFee + gst;
 
-  const handleOpenPayment = (e: React.FormEvent) => {
+  const handleOpenRazorpay = (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!customerEmail.trim() || !customerEmail.includes('@')) {
-      setEmailError('Please enter a valid email address.');
+      setEmailError('Please enter a valid email address to receive your tickets.');
       return;
     }
 
     setEmailError('');
-    setShowPaymentModal(true);
+    setShowRazorpayModal(true);
   };
 
   const handleExecutePayment = () => {
-    setIsProcessingPayment(true);
+    setIsProcessing(true);
 
     setTimeout(() => {
-      const queryParams = new URLSearchParams({
-        showId: showId,
-        seats: selectedSeatIds.join(','),
-        email: customerEmail.trim().toLowerCase(),
-        total: grandTotal.toString(),
-      });
+      setIsProcessing(false);
+      setPaymentSuccess(true);
 
-      router.push(`/booking/confirmation?${queryParams.toString()}`);
-    }, 1500);
+      setTimeout(() => {
+        const queryParams = new URLSearchParams({
+          showId: showId,
+          seats: selectedSeatIds.join(','),
+          email: customerEmail.trim().toLowerCase(),
+          total: grandTotal.toString(),
+        });
+
+        router.push(`/booking/confirmation?${queryParams.toString()}`);
+      }, 1200);
+    }, 1800);
   };
 
   return (
@@ -158,23 +171,25 @@ export default function CheckoutPage() {
       </header>
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Timer Banner */}
         <div className="mb-6 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs sm:text-sm flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Clock className="h-4 w-4 text-amber-400 flex-shrink-0" />
-            <span>Your selected seats are temporarily locked. Complete checkout before timer expires.</span>
+            <span>Your seats are locked for 10 minutes. Please finalize payment.</span>
           </div>
-          <span className="font-mono font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-200 text-xs">
-            09:45
+          <span className="font-mono font-bold px-2.5 py-0.5 rounded bg-amber-500/20 text-amber-200 text-xs">
+            09:30
           </span>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* F&B Section */}
           <div className="lg:col-span-8 space-y-6">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
                 <Utensils className="h-5 w-5 text-rose-500" /> Grab a Bite (F&B Combos)
               </h2>
-              <span className="text-xs text-zinc-500">Optional items for cinema pickup</span>
+              <span className="text-xs text-zinc-500">Pick up at cinema concession counter</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -233,14 +248,15 @@ export default function CheckoutPage() {
             </div>
           </div>
 
+          {/* Order Summary & Pay Action */}
           <div className="lg:col-span-4">
             <form
-              onSubmit={handleOpenPayment}
+              onSubmit={handleOpenRazorpay}
               className="p-6 rounded-3xl bg-zinc-900/70 border border-zinc-800 sticky top-20 shadow-2xl space-y-5"
             >
               <div className="space-y-2.5 text-xs text-zinc-300 pb-4 border-b border-zinc-800/80">
                 <div className="flex justify-between">
-                  <span className="text-zinc-500">Seats ({selectedSeatLabels.length}):</span>
+                  <span className="text-zinc-500">Selected Seats ({selectedSeatLabels.length}):</span>
                   <span className="font-mono font-bold text-emerald-400">
                     {selectedSeatLabels.join(', ') || 'None selected'}
                   </span>
@@ -251,7 +267,7 @@ export default function CheckoutPage() {
                 </div>
                 {fnbTotal > 0 && (
                   <div className="flex justify-between">
-                    <span className="text-zinc-500">Food & Beverages:</span>
+                    <span className="text-zinc-500">F&B Total:</span>
                     <span className="font-semibold text-white">₹{fnbTotal}</span>
                   </div>
                 )}
@@ -267,7 +283,7 @@ export default function CheckoutPage() {
 
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
-                  <Mail className="h-3.5 w-3.5 text-rose-500" /> Email for Ticket & QR Pass
+                  <Mail className="h-3.5 w-3.5 text-rose-500" /> Email for E-Ticket & Pass
                 </label>
                 <input
                   type="email"
@@ -277,7 +293,7 @@ export default function CheckoutPage() {
                     setCustomerEmail(e.target.value);
                     if (emailError) setEmailError('');
                   }}
-                  placeholder="e.g. ritik@cinevault.io"
+                  placeholder="e.g. yourname@gmail.com"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-rose-500 transition"
                 />
                 {emailError && (
@@ -288,148 +304,273 @@ export default function CheckoutPage() {
               </div>
 
               <div className="pt-2 flex items-center justify-between">
-                <span className="text-sm font-medium text-zinc-400">Amount Payable</span>
-                <span className="text-xl font-extrabold text-white">₹{grandTotal}</span>
+                <span className="text-sm font-medium text-zinc-400">Total Payable</span>
+                <span className="text-xl font-black text-white">₹{grandTotal}</span>
               </div>
 
               <button
                 type="submit"
                 disabled={selectedSeatIds.length === 0}
-                className="w-full py-3 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-bold text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-rose-600/20 cursor-pointer disabled:cursor-not-allowed"
+                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-bold text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 cursor-pointer disabled:cursor-not-allowed"
               >
-                <CreditCard className="h-4 w-4" />
-                Proceed to Pay ₹{grandTotal}
+                <Zap className="h-4 w-4 fill-current" />
+                Pay ₹{grandTotal} with Razorpay
               </button>
 
               <div className="flex items-center justify-center gap-1.5 text-[10px] text-zinc-500 pt-1">
                 <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-                <span>256-Bit Encrypted Secure Checkout</span>
+                <span>Secured by Razorpay • 256-bit SSL Encryption</span>
               </div>
             </form>
           </div>
         </div>
       </main>
 
-      {showPaymentModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-6 relative animate-in fade-in zoom-in-95 duration-200">
-            <button
-              onClick={() => setShowPaymentModal(false)}
-              className="absolute right-4 top-4 text-zinc-400 hover:text-white p-1 rounded-lg transition"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            <div className="flex items-center gap-3 border-b border-zinc-800 pb-4">
-              <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-500 border border-rose-500/20">
-                <Lock className="h-5 w-5" />
+      {/* RAZORPAY MODAL SIMULATION */}
+      {showRazorpayModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-[#0c1222] border border-[#1e293b] rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            
+            {/* Razorpay Top Header */}
+            <div className="bg-[#020617] p-4 sm:p-5 border-b border-[#1e293b] flex items-center justify-between relative">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-xl bg-blue-600 flex items-center justify-center font-black text-white text-base shadow-lg shadow-blue-500/30">
+                  R
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-white tracking-wide">Razorpay Trusted Business</h3>
+                    <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.2 rounded font-semibold uppercase">Test Mode</span>
+                  </div>
+                  <p className="text-xs text-zinc-400">CineVault Entertainment Pvt Ltd</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-base font-bold text-white">CineVault Payment Gateway</h3>
-                <p className="text-xs text-zinc-400">Total: ₹{grandTotal} • Test Mode</p>
-              </div>
-            </div>
 
-            <div className="grid grid-cols-3 gap-2">
+              <div className="text-right">
+                <span className="text-[11px] text-zinc-400 block">Amount</span>
+                <span className="text-lg font-black text-white">₹{grandTotal}</span>
+              </div>
+
               <button
                 type="button"
-                onClick={() => setPaymentMethod('upi')}
-                className={`py-2 px-3 rounded-xl text-xs font-semibold flex flex-col items-center gap-1.5 transition border ${
-                  paymentMethod === 'upi'
-                    ? 'bg-rose-600/10 text-rose-400 border-rose-500/30'
-                    : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:border-zinc-700'
-                }`}
+                onClick={() => setShowRazorpayModal(false)}
+                className="absolute right-3 top-3 text-zinc-400 hover:text-white p-1 rounded-lg transition"
               >
-                <QrCode className="h-4 w-4" /> UPI Apps
-              </button>
-              <button
-                type="button"
-                onClick={() => setPaymentMethod('card')}
-                className={`py-2 px-3 rounded-xl text-xs font-semibold flex flex-col items-center gap-1.5 transition border ${
-                  paymentMethod === 'card'
-                    ? 'bg-rose-600/10 text-rose-400 border-rose-500/30'
-                    : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:border-zinc-700'
-                }`}
-              >
-                <CreditCard className="h-4 w-4" /> Cards
-              </button>
-              <button
-                type="button"
-                onClick={() => setPaymentMethod('netbanking')}
-                className={`py-2 px-3 rounded-xl text-xs font-semibold flex flex-col items-center gap-1.5 transition border ${
-                  paymentMethod === 'netbanking'
-                    ? 'bg-rose-600/10 text-rose-400 border-rose-500/30'
-                    : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:border-zinc-700'
-                }`}
-              >
-                <Building2 className="h-4 w-4" /> NetBanking
+                <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800/80 space-y-3">
-              {paymentMethod === 'upi' && (
-                <div className="text-center space-y-2 py-2">
-                  <span className="text-xs text-zinc-400 block">Scan with any UPI App or enter VPA</span>
-                  <div className="p-3 bg-white inline-block rounded-xl">
-                    <QrCode className="h-20 w-20 text-zinc-950" />
-                  </div>
-                  <p className="text-[11px] font-mono text-emerald-400 font-medium">cinevault@icici (Verified)</p>
+            {/* Razorpay Body */}
+            {paymentSuccess ? (
+              <div className="p-10 text-center space-y-3">
+                <div className="h-16 w-16 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 rounded-full flex items-center justify-center mx-auto animate-bounce">
+                  <CheckCircle2 className="h-8 w-8" />
                 </div>
-              )}
-
-              {paymentMethod === 'card' && (
-                <div className="space-y-2.5 text-xs">
-                  <input
-                    type="text"
-                    defaultValue="4532 •••• •••• 8892"
-                    disabled
-                    className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 font-mono"
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="text"
-                      defaultValue="08/28"
-                      disabled
-                      className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 font-mono"
-                    />
-                    <input
-                      type="password"
-                      defaultValue="•••"
-                      disabled
-                      className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 font-mono"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {paymentMethod === 'netbanking' && (
-                <div className="space-y-2 text-xs">
-                  <select
-                    disabled
-                    className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300"
+                <h3 className="text-xl font-black text-white">Payment Successful!</h3>
+                <p className="text-xs text-zinc-400">Razorpay Payment ID: pay_sim_{Math.random().toString(36).substring(2, 10).toUpperCase()}</p>
+                <p className="text-xs text-emerald-400 font-semibold">Generating your movie passes & dispatching email...</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-12 min-h-[340px]">
+                {/* Left Side Navigation Tabs */}
+                <div className="col-span-4 bg-[#090e1a] border-r border-[#1e293b] p-2 space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => setRzpTab('upi')}
+                    className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition ${
+                      rzpTab === 'upi' ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
+                    }`}
                   >
-                    <option>HDFC Bank • Internet Banking</option>
-                  </select>
+                    <Smartphone className="h-3.5 w-3.5" /> UPI Apps
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRzpTab('card')}
+                    className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition ${
+                      rzpTab === 'card' ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
+                    }`}
+                  >
+                    <CreditCard className="h-3.5 w-3.5" /> Cards
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRzpTab('netbanking')}
+                    className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition ${
+                      rzpTab === 'netbanking' ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
+                    }`}
+                  >
+                    <Building2 className="h-3.5 w-3.5" /> Netbanking
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRzpTab('wallet')}
+                    className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition ${
+                      rzpTab === 'wallet' ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
+                    }`}
+                  >
+                    <Wallet className="h-3.5 w-3.5" /> Wallets
+                  </button>
                 </div>
-              )}
-            </div>
 
-            <button
-              onClick={handleExecutePayment}
-              disabled={isProcessingPayment}
-              className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white font-bold text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 cursor-pointer"
-            >
-              {isProcessingPayment ? (
-                <>
-                  <div className="h-4 w-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                  Authorizing Transaction...
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="h-4 w-4" /> Authorize & Pay ₹{grandTotal}
-                </>
-              )}
-            </button>
+                {/* Right Side Tab Contents */}
+                <div className="col-span-8 p-5 flex flex-col justify-between space-y-4">
+                  
+                  {/* UPI Option */}
+                  {rzpTab === 'upi' && (
+                    <div className="space-y-3">
+                      <span className="text-xs font-bold text-zinc-300 block">Select your Preferred UPI App</span>
+                      
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedUpiApp('gpay')}
+                          className={`p-2.5 rounded-xl border text-xs font-bold flex items-center gap-2 transition ${
+                            selectedUpiApp === 'gpay' ? 'border-blue-500 bg-blue-500/10 text-white' : 'border-[#1e293b] bg-[#020617] text-zinc-400 hover:border-zinc-700'
+                          }`}
+                        >
+                          <span className="h-6 w-6 rounded-full bg-white text-zinc-950 font-black flex items-center justify-center text-[10px]">G</span>
+                          Google Pay
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setSelectedUpiApp('phonepe')}
+                          className={`p-2.5 rounded-xl border text-xs font-bold flex items-center gap-2 transition ${
+                            selectedUpiApp === 'phonepe' ? 'border-blue-500 bg-blue-500/10 text-white' : 'border-[#1e293b] bg-[#020617] text-zinc-400 hover:border-zinc-700'
+                          }`}
+                        >
+                          <span className="h-6 w-6 rounded-full bg-purple-600 text-white font-black flex items-center justify-center text-[10px]">पे</span>
+                          PhonePe
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setSelectedUpiApp('paytm')}
+                          className={`p-2.5 rounded-xl border text-xs font-bold flex items-center gap-2 transition ${
+                            selectedUpiApp === 'paytm' ? 'border-blue-500 bg-blue-500/10 text-white' : 'border-[#1e293b] bg-[#020617] text-zinc-400 hover:border-zinc-700'
+                          }`}
+                        >
+                          <span className="h-6 w-6 rounded-full bg-cyan-500 text-white font-black flex items-center justify-center text-[10px]">P</span>
+                          Paytm UPI
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setSelectedUpiApp('qr')}
+                          className={`p-2.5 rounded-xl border text-xs font-bold flex items-center gap-2 transition ${
+                            selectedUpiApp === 'qr' ? 'border-blue-500 bg-blue-500/10 text-white' : 'border-[#1e293b] bg-[#020617] text-zinc-400 hover:border-zinc-700'
+                          }`}
+                        >
+                          <QrCode className="h-5 w-5 text-zinc-300" />
+                          Dynamic QR
+                        </button>
+                      </div>
+
+                      {selectedUpiApp === 'qr' && (
+                        <div className="p-3 bg-[#020617] border border-[#1e293b] rounded-xl flex items-center gap-3">
+                          <div className="p-1 bg-white rounded-lg">
+                            <QrCode className="h-12 w-12 text-zinc-950" />
+                          </div>
+                          <p className="text-[11px] text-zinc-400">Scan this QR with any UPI app to pay instantly.</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Card Option */}
+                  {rzpTab === 'card' && (
+                    <div className="space-y-2.5 text-xs">
+                      <div>
+                        <label className="text-zinc-400 block mb-1">Card Number (Test Simulation)</label>
+                        <input
+                          type="text"
+                          defaultValue="4532 8900 1234 9876"
+                          disabled
+                          className="w-full px-3 py-2 rounded-lg bg-[#020617] border border-[#1e293b] text-white font-mono"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-zinc-400 block mb-1">Expiry</label>
+                          <input
+                            type="text"
+                            defaultValue="12/28"
+                            disabled
+                            className="w-full px-3 py-2 rounded-lg bg-[#020617] border border-[#1e293b] text-white font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-zinc-400 block mb-1">CVV</label>
+                          <input
+                            type="password"
+                            defaultValue="888"
+                            disabled
+                            className="w-full px-3 py-2 rounded-lg bg-[#020617] border border-[#1e293b] text-white font-mono"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* NetBanking Option */}
+                  {rzpTab === 'netbanking' && (
+                    <div className="space-y-2 text-xs">
+                      <label className="text-zinc-400 block">Select Popular Bank</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {['HDFC Bank', 'ICICI Bank', 'SBI', 'Axis Bank'].map((bank) => (
+                          <button
+                            key={bank}
+                            type="button"
+                            onClick={() => setSelectedBank(bank)}
+                            className={`p-2 rounded-lg border text-xs font-semibold text-left transition ${
+                              selectedBank === bank ? 'border-blue-500 bg-blue-500/10 text-white' : 'border-[#1e293b] bg-[#020617] text-zinc-400'
+                            }`}
+                          >
+                            {bank}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Wallets Option */}
+                  {rzpTab === 'wallet' && (
+                    <div className="space-y-2 text-xs">
+                      <label className="text-zinc-400 block">Available Wallets</label>
+                      <div className="p-3 rounded-xl bg-[#020617] border border-[#1e293b] flex items-center justify-between">
+                        <span className="font-bold text-white">Amazon Pay Balance</span>
+                        <span className="text-emerald-400 font-bold">₹5,000 Available</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Razorpay Submit Action */}
+                  <div className="pt-2 border-t border-[#1e293b]">
+                    <button
+                      type="button"
+                      onClick={handleExecutePayment}
+                      disabled={isProcessing}
+                      className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 text-white font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 cursor-pointer"
+                    >
+                      {isProcessing ? (
+                        <>
+                          <div className="h-4 w-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                          Processing with Razorpay...
+                        </>
+                      ) : (
+                        <>
+                          <Lock className="h-4 w-4" /> Pay ₹{grandTotal}
+                        </>
+                      )}
+                    </button>
+                    <div className="flex items-center justify-center gap-1.5 text-[10px] text-zinc-500 mt-2">
+                      <Info className="h-3 w-3 text-blue-400" />
+                      <span>Simulated Razorpay Checkout for Sandbox Testing</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
