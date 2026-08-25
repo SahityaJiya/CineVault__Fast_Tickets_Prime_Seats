@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-  "dev": "next dev",
-  "build": "prisma generate && next build",
-  "start": "next start",
-  "lint": "next lint"
-},
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
   },
@@ -25,6 +25,7 @@
     "qrcode.react": "^4.2.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "resend": "^6.22.1",
     "tailwind-merge": "^3.6.0",
     "ws": "^8.21.3"
   },

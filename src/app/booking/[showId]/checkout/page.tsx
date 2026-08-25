@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import { 
   ArrowLeft, 
-  Film, 
   Clock, 
   ShieldCheck, 
   CreditCard, 
@@ -12,7 +11,12 @@ import {
   Plus, 
   Minus,
   Mail,
-  AlertTriangle
+  AlertTriangle,
+  QrCode,
+  Building2,
+  Lock,
+  CheckCircle2,
+  X
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -60,58 +64,28 @@ const FOOD_ITEMS: FoodItem[] = [
   },
 ];
 
-interface CheckoutClientProps {
-  show?: {
-    id: string;
-    startTime: Date | string;
-    basePrice: number;
-    movie: {
-      title: string;
-      posterUrl: string;
-      format: string[];
-    };
-    screen: {
-      name: string;
-      theater: {
-        name: string;
-        location: string;
-      };
-    };
-  };
-  selectedSeatIds?: string[];
-  selectedSeatLabels?: string[];
-  ticketTotal?: number;
-}
-
-export default function CheckoutPage({
-  show,
-  selectedSeatIds: propSeatIds,
-  selectedSeatLabels: propSeatLabels,
-  ticketTotal: propTicketTotal,
-}: CheckoutClientProps) {
+export default function CheckoutPage() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
 
-  const showId = show?.id || (params?.showId as string) || '';
+  const showId = (params?.showId as string) || '';
   
-  // Read from props first; if undefined, parse from URL query params
   const seatIdsFromUrl = searchParams.get('seatIds') ? searchParams.get('seatIds')!.split(',').filter(Boolean) : [];
-  const selectedSeatIds = propSeatIds && propSeatIds.length > 0 ? propSeatIds : seatIdsFromUrl;
+  const selectedSeatIds = seatIdsFromUrl;
 
   const seatLabelsFromUrl = searchParams.get('seats') ? searchParams.get('seats')!.split(',').filter(Boolean) : [];
-  const selectedSeatLabels = propSeatLabels && propSeatLabels.length > 0 
-    ? propSeatLabels 
-    : (seatLabelsFromUrl.length > 0 ? seatLabelsFromUrl : selectedSeatIds.map((_, i) => `Seat ${i + 1}`));
+  const selectedSeatLabels = seatLabelsFromUrl.length > 0 ? seatLabelsFromUrl : selectedSeatIds.map((_, i) => `Seat ${i + 1}`);
 
-  const ticketTotal = propTicketTotal !== undefined && propTicketTotal > 0 
-    ? propTicketTotal 
-    : (searchParams.get('total') ? parseFloat(searchParams.get('total')!) : selectedSeatIds.length * 300);
+  const ticketTotal = searchParams.get('total') ? parseFloat(searchParams.get('total')!) : selectedSeatIds.length * 300;
 
   const [fnbCart, setFnbCart] = useState<Record<string, number>>({});
   const [customerEmail, setCustomerEmail] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [emailError, setEmailError] = useState('');
+  
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'upi' | 'card' | 'netbanking'>('upi');
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
   const handleAddItem = (id: string) => {
     setFnbCart((prev) => ({
@@ -137,11 +111,11 @@ export default function CheckoutPage({
     return total + (item ? item.price * qty : 0);
   }, 0);
 
-  const convenienceFee = (selectedSeatIds?.length || 0) > 0 ? 35 : 0;
+  const convenienceFee = selectedSeatIds.length > 0 ? 35 : 0;
   const gst = Math.round((convenienceFee + fnbTotal) * 0.18);
   const grandTotal = ticketTotal + fnbTotal + convenienceFee + gst;
 
-  const handleConfirmAndPay = (e: React.FormEvent) => {
+  const handleOpenPayment = (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!customerEmail.trim() || !customerEmail.includes('@')) {
@@ -150,21 +124,26 @@ export default function CheckoutPage({
     }
 
     setEmailError('');
-    setIsSubmitting(true);
+    setShowPaymentModal(true);
+  };
 
-    const queryParams = new URLSearchParams({
-      showId: showId,
-      seats: selectedSeatIds.join(','),
-      email: customerEmail.trim().toLowerCase(),
-      total: grandTotal.toString(),
-    });
+  const handleExecutePayment = () => {
+    setIsProcessingPayment(true);
 
-    router.push(`/booking/confirmation?${queryParams.toString()}`);
+    setTimeout(() => {
+      const queryParams = new URLSearchParams({
+        showId: showId,
+        seats: selectedSeatIds.join(','),
+        email: customerEmail.trim().toLowerCase(),
+        total: grandTotal.toString(),
+      });
+
+      router.push(`/booking/confirmation?${queryParams.toString()}`);
+    }, 1500);
   };
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
-      {/* Top Bar Navigation */}
       <header className="sticky top-0 z-30 border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md px-4 sm:px-8 py-3.5 flex items-center justify-between">
         <Link
           href={`/booking/${showId}`}
@@ -179,7 +158,6 @@ export default function CheckoutPage({
       </header>
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Timer Banner */}
         <div className="mb-6 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs sm:text-sm flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Clock className="h-4 w-4 text-amber-400 flex-shrink-0" />
@@ -191,7 +169,6 @@ export default function CheckoutPage({
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Left Column: F&B Combos */}
           <div className="lg:col-span-8 space-y-6">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
@@ -256,33 +233,11 @@ export default function CheckoutPage({
             </div>
           </div>
 
-          {/* Right Column: Order Summary & Checkout Form */}
           <div className="lg:col-span-4">
             <form
-              onSubmit={handleConfirmAndPay}
+              onSubmit={handleOpenPayment}
               className="p-6 rounded-3xl bg-zinc-900/70 border border-zinc-800 sticky top-20 shadow-2xl space-y-5"
             >
-              {/* Movie Details Header */}
-              {show && (
-                <div className="flex gap-4 items-center pb-4 border-b border-zinc-800/80">
-                  <img
-                    src={show.movie?.posterUrl}
-                    alt={show.movie?.title}
-                    className="w-14 aspect-[2/3] rounded-lg object-cover bg-zinc-800 shadow"
-                  />
-                  <div className="space-y-1">
-                    <h3 className="font-bold text-sm text-white leading-tight">{show.movie?.title}</h3>
-                    <p className="text-[11px] text-zinc-400">
-                      {show.screen?.theater?.name} • {show.screen?.name}
-                    </p>
-                    <p className="text-[11px] text-rose-400 font-medium">
-                      {new Date(show.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Booking Specifications */}
               <div className="space-y-2.5 text-xs text-zinc-300 pb-4 border-b border-zinc-800/80">
                 <div className="flex justify-between">
                   <span className="text-zinc-500">Seats ({selectedSeatLabels.length}):</span>
@@ -310,7 +265,6 @@ export default function CheckoutPage({
                 </div>
               </div>
 
-              {/* Contact Email Input */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
                   <Mail className="h-3.5 w-3.5 text-rose-500" /> Email for Ticket & QR Pass
@@ -333,20 +287,18 @@ export default function CheckoutPage({
                 )}
               </div>
 
-              {/* Total Payable Summary */}
               <div className="pt-2 flex items-center justify-between">
                 <span className="text-sm font-medium text-zinc-400">Amount Payable</span>
                 <span className="text-xl font-extrabold text-white">₹{grandTotal}</span>
               </div>
 
-              {/* Payment Submit Button */}
               <button
                 type="submit"
-                disabled={isSubmitting || selectedSeatIds.length === 0}
+                disabled={selectedSeatIds.length === 0}
                 className="w-full py-3 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-bold text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-rose-600/20 cursor-pointer disabled:cursor-not-allowed"
               >
                 <CreditCard className="h-4 w-4" />
-                {isSubmitting ? 'Processing Payment...' : `Pay ₹${grandTotal}`}
+                Proceed to Pay ₹{grandTotal}
               </button>
 
               <div className="flex items-center justify-center gap-1.5 text-[10px] text-zinc-500 pt-1">
@@ -357,6 +309,130 @@ export default function CheckoutPage({
           </div>
         </div>
       </main>
+
+      {showPaymentModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-6 relative animate-in fade-in zoom-in-95 duration-200">
+            <button
+              onClick={() => setShowPaymentModal(false)}
+              className="absolute right-4 top-4 text-zinc-400 hover:text-white p-1 rounded-lg transition"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="flex items-center gap-3 border-b border-zinc-800 pb-4">
+              <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-500 border border-rose-500/20">
+                <Lock className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">CineVault Payment Gateway</h3>
+                <p className="text-xs text-zinc-400">Total: ₹{grandTotal} • Test Mode</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('upi')}
+                className={`py-2 px-3 rounded-xl text-xs font-semibold flex flex-col items-center gap-1.5 transition border ${
+                  paymentMethod === 'upi'
+                    ? 'bg-rose-600/10 text-rose-400 border-rose-500/30'
+                    : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:border-zinc-700'
+                }`}
+              >
+                <QrCode className="h-4 w-4" /> UPI Apps
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('card')}
+                className={`py-2 px-3 rounded-xl text-xs font-semibold flex flex-col items-center gap-1.5 transition border ${
+                  paymentMethod === 'card'
+                    ? 'bg-rose-600/10 text-rose-400 border-rose-500/30'
+                    : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:border-zinc-700'
+                }`}
+              >
+                <CreditCard className="h-4 w-4" /> Cards
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('netbanking')}
+                className={`py-2 px-3 rounded-xl text-xs font-semibold flex flex-col items-center gap-1.5 transition border ${
+                  paymentMethod === 'netbanking'
+                    ? 'bg-rose-600/10 text-rose-400 border-rose-500/30'
+                    : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:border-zinc-700'
+                }`}
+              >
+                <Building2 className="h-4 w-4" /> NetBanking
+              </button>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800/80 space-y-3">
+              {paymentMethod === 'upi' && (
+                <div className="text-center space-y-2 py-2">
+                  <span className="text-xs text-zinc-400 block">Scan with any UPI App or enter VPA</span>
+                  <div className="p-3 bg-white inline-block rounded-xl">
+                    <QrCode className="h-20 w-20 text-zinc-950" />
+                  </div>
+                  <p className="text-[11px] font-mono text-emerald-400 font-medium">cinevault@icici (Verified)</p>
+                </div>
+              )}
+
+              {paymentMethod === 'card' && (
+                <div className="space-y-2.5 text-xs">
+                  <input
+                    type="text"
+                    defaultValue="4532 •••• •••• 8892"
+                    disabled
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 font-mono"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      defaultValue="08/28"
+                      disabled
+                      className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 font-mono"
+                    />
+                    <input
+                      type="password"
+                      defaultValue="•••"
+                      disabled
+                      className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 font-mono"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {paymentMethod === 'netbanking' && (
+                <div className="space-y-2 text-xs">
+                  <select
+                    disabled
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300"
+                  >
+                    <option>HDFC Bank • Internet Banking</option>
+                  </select>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={handleExecutePayment}
+              disabled={isProcessingPayment}
+              className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white font-bold text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 cursor-pointer"
+            >
+              {isProcessingPayment ? (
+                <>
+                  <div className="h-4 w-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                  Authorizing Transaction...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-4 w-4" /> Authorize & Pay ₹{grandTotal}
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

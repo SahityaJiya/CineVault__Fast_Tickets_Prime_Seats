@@ -1,5 +1,6 @@
 'use server';
 
+import { sendTicketConfirmationEmail } from './email';
 import { prisma } from '@/lib/prisma';
 import { redis } from '@/lib/redis';
 import { BookingStatus, SeatStatus } from '@prisma/client';
@@ -98,9 +99,24 @@ export async function finalizeBookingAction(
       await redis.del(`lock:show:${showId}:seat:${seatId}`);
     }
 
+    const bookingRef = `CV-${booking.qrCodeToken.substring(0, 6).toUpperCase()}`;
+    const seatLabels = show.showSeats.map((ss) => `${ss.seat.rowLabel}${ss.seat.seatNumber}`);
+
+    // Trigger confirmation email asynchronously
+    sendTicketConfirmationEmail({
+      toEmail: email,
+      bookingRef,
+      movieTitle: show.movie.title,
+      theaterName: show.screen.theater.name,
+      screenName: show.screen.name,
+      startTime: show.startTime,
+      seats: seatLabels,
+      totalAmount,
+    }).catch((err) => console.error('Email dispatch error:', err));
+
     return {
       bookingId: booking.id,
-      bookingRef: `CV-${booking.qrCodeToken.substring(0, 6).toUpperCase()}`,
+      bookingRef,
       movieTitle: show.movie.title,
       moviePoster: show.movie.posterUrl,
       format: show.movie.format,
@@ -108,7 +124,7 @@ export async function finalizeBookingAction(
       screenName: show.screen.name,
       location: show.screen.theater.location,
       startTime: show.startTime,
-      seats: show.showSeats.map((ss) => `${ss.seat.rowLabel}${ss.seat.seatNumber}`),
+      seats: seatLabels,
       totalAmount,
     };
   } catch (error) {
@@ -145,7 +161,6 @@ export async function getUserBookingsAction(
     }
 
     // If an email is provided, fetch ONLY for that user.
-    // If no email is provided, return empty list or look for matching user.
     if (!targetEmail) {
       return [];
     }
