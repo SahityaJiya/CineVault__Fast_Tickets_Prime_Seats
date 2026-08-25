@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { redis } from '@/lib/redis';
 import { BookingStatus, SeatStatus } from '@prisma/client';
+import { cookies } from 'next/headers';
 
 export interface FinalizeBookingParams {
   showId: string;
@@ -31,17 +32,18 @@ export async function finalizeBookingAction(
   try {
     const { showId, seatIds, totalAmount, customerEmail } = params;
 
-    let user = await prisma.user.findUnique({
-      where: { email: customerEmail },
+    const email = customerEmail.trim().toLowerCase();
+
+    // Find or create user dynamically for this customer email
+    const user = await prisma.user.upsert({
+      where: { email },
+      update: {},
+      create: {
+        email,
+        name: email.split('@')[0],
+        passwordHash: 'GUEST_CHECKOUT_NO_PWD',
+      },
     });
-
-    if (!user) {
-      user = await prisma.user.findFirst();
-    }
-
-    if (!user) {
-      throw new Error('No valid user found to associate booking.');
-    }
 
     const show = await prisma.show.findUnique({
       where: { id: showId },
@@ -65,7 +67,8 @@ export async function finalizeBookingAction(
 
     if (!show || show.showSeats.length === 0) {
       return null;
-      }
+    }
+
     // Atomic transaction: Create booking, connect showSeats, and update seat status
     const booking = await prisma.$transaction(async (tx) => {
       const createdBooking = await tx.booking.create({
@@ -131,14 +134,29 @@ export interface UserBookingHistoryItem {
 }
 
 export async function getUserBookingsAction(
-  email: string = 'alex@cinevault.io'
+  email?: string
 ): Promise<UserBookingHistoryItem[]> {
   try {
+    let targetEmail = email?.trim().toLowerCase();
+
+    if (!targetEmail) {
+      const cookieStore = await cookies();
+      targetEmail = cookieStore.get('user_email')?.value?.trim().toLowerCase();
+    }
+
+    // If an email is provided, fetch ONLY for that user.
+    // If no email is provided, return empty list or look for matching user.
+    if (!targetEmail) {
+      return [];
+    }
+
     const user = await prisma.user.findUnique({
-      where: { email },
+      where: { email: targetEmail },
     });
 
-    if (!user) return [];
+    if (!user) {
+      return [];
+    }
 
     const bookings = await prisma.booking.findMany({
       where: { userId: user.id },

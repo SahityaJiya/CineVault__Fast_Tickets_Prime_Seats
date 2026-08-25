@@ -1,7 +1,10 @@
 import { getAvailableCities, getMoviesByCity } from '@/actions/movies';
+import { getSelectedCityAction } from '@/actions/city';
 import Navbar from '@/components/Navbar';
 import MovieCard from '@/components/MovieCard';
 import { Film, Sparkles } from 'lucide-react';
+
+export const dynamic = 'force-dynamic';
 
 interface HomePageProps {
   searchParams: Promise<{
@@ -11,8 +14,13 @@ interface HomePageProps {
 }
 
 export default async function HomePage({ searchParams }: HomePageProps) {
-  const params = await searchParams;
-  const currentCitySlug = params.city || 'mumbai';
+  const [params, savedCity] = await Promise.all([
+    searchParams,
+    getSelectedCityAction(),
+  ]);
+
+  // Use URL parameter if provided, otherwise fallback to the saved cookie city
+  const currentCitySlug = params.city || savedCity || 'mumbai';
   
   const [cities, movies] = await Promise.all([
     getAvailableCities(),

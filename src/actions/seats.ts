@@ -1,6 +1,7 @@
 'use server';
 
 import { prisma } from '@/lib/prisma';
+import { redis } from '@/lib/redis';
 import { ShowDetailsWithMatrix, MatrixSeat, CheckoutShowDetails } from '@/types';
 import { SeatTier, SeatStatus } from '@prisma/client';
 
@@ -31,6 +32,29 @@ export async function getShowSeatMatrix(showId: string): Promise<ShowDetailsWith
     });
 
     if (!show) return null;
+
+    // Check Redis for active locks on any seats marked LOCKED in DB
+    const lockedSeats = show.showSeats.filter((ss) => ss.status === SeatStatus.LOCKED);
+    const expiredSeatIds: string[] = [];
+
+    await Promise.all(
+      lockedSeats.map(async (ss) => {
+        const lockKey = `lock:show:${showId}:seat:${ss.id}`;
+        const isLockedInRedis = await redis.exists(lockKey);
+        if (!isLockedInRedis) {
+          expiredSeatIds.push(ss.id);
+          ss.status = SeatStatus.AVAILABLE;
+        }
+      })
+    );
+
+    // Lazily clean up expired locks in database
+    if (expiredSeatIds.length > 0) {
+      await prisma.showSeat.updateMany({
+        where: { id: { in: expiredSeatIds } },
+        data: { status: SeatStatus.AVAILABLE },
+      });
+    }
 
     // Group materialized ShowSeats by their row label
     const seatsByRow: Record<string, { tier: SeatTier; seats: MatrixSeat[] }> = {};

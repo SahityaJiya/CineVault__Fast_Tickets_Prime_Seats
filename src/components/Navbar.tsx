@@ -1,21 +1,28 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { Film, MapPin, Search, ChevronDown, Ticket } from 'lucide-react';
 import { CityOption } from '@/types';
 import CityModal from './CityModal';
+import { setSelectedCityAction } from '@/actions/city';
 
-interface NavbarProps {
-  cities: CityOption[];
-  currentCitySlug: string;
+export interface NavbarProps {
+  cities?: CityOption[];
+  currentCitySlug?: string;
 }
 
-export default function Navbar({ cities, currentCitySlug }: NavbarProps) {
+export default function Navbar({ cities = [], currentCitySlug = 'mumbai' }: NavbarProps) {
   const [isCityModalOpen, setIsCityModalOpen] = useState(false);
   const [selectedCity, setSelectedCity] = useState(currentCitySlug || 'mumbai');
 
   const activeCity = cities.find((c) => c.slug === selectedCity) || cities[0];
+
+  const handleSelectCity = async (slug: string) => {
+    setSelectedCity(slug);
+    await setSelectedCityAction(slug);
+    window.location.href = `/?city=${slug}`;
+  };
 
   return (
     <>
@@ -75,10 +82,7 @@ export default function Navbar({ cities, currentCitySlug }: NavbarProps) {
         onClose={() => setIsCityModalOpen(false)}
         cities={cities}
         selectedCity={selectedCity}
-        onSelectCity={(slug) => {
-          setSelectedCity(slug);
-          window.location.href = `/?city=${slug}`;
-        }}
+        onSelectCity={handleSelectCity}
       />
     </>
   );
