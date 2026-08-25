@@ -5,11 +5,15 @@ import Link from 'next/link';
 import { Ticket, Calendar, Clock, MapPin, Film, Sparkles } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function MyBookingsPage() {
   const [cities, bookings] = await Promise.all([
     getAvailableCities(),
     getUserBookingsAction('alex@cinevault.io'),
   ]);
+
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
