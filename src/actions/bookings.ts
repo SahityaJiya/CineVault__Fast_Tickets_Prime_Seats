@@ -11,6 +11,8 @@ export interface FinalizeBookingParams {
   seatIds: string[];
   totalAmount: number;
   customerEmail: string;
+  userName?: string;
+  userPhone?: string;
 }
 
 export interface BookingReceipt {
@@ -29,108 +31,170 @@ export interface BookingReceipt {
 
 export async function finalizeBookingAction(
   params: FinalizeBookingParams
-): Promise<BookingReceipt | null> {
+): Promise<{ success: boolean; data?: BookingReceipt; error?: string }> {
   try {
-    const { showId, seatIds, totalAmount, customerEmail } = params;
-
+    const { showId, seatIds, totalAmount, customerEmail, userName } = params;
     const email = customerEmail.trim().toLowerCase();
 
-    // Find or create user dynamically for this customer email
-    const user = await prisma.user.upsert({
-      where: { email },
-      update: {},
-      create: {
-        email,
-        name: email.split('@')[0],
-        passwordHash: 'GUEST_CHECKOUT_NO_PWD',
-      },
-    });
-
-    const show = await prisma.show.findUnique({
-      where: { id: showId },
-      include: {
-        movie: true,
-        screen: {
-          include: { theater: true },
-        },
-        showSeats: {
-          where: {
-            id: { in: seatIds },
-          },
-          include: { seat: true },
-          orderBy: [
-            { seat: { rowLabel: 'asc' } },
-            { seat: { seatNumber: 'asc' } },
-          ],
-        },
-      },
-    });
-
-    if (!show || show.showSeats.length === 0) {
-      return null;
+    if (!showId || !seatIds || seatIds.length === 0) {
+      return { success: false, error: 'No seats selected.' };
     }
 
-    // Atomic transaction: Create booking, connect showSeats, and update seat status
-    const booking = await prisma.$transaction(async (tx) => {
-      const createdBooking = await tx.booking.create({
-        data: {
-          userId: user.id,
-          showId: show.id,
-          totalAmount,
-          status: BookingStatus.CONFIRMED,
-          showSeats: {
-            connect: show.showSeats.map((ss) => ({ id: ss.id })),
+    // Atomic transaction: verify collision & update statuses with extended timeouts
+    const result = await prisma.$transaction(
+      async (tx) => {
+        // 1. Fetch show and requested showSeats
+        const show = await tx.show.findUnique({
+          where: { id: showId },
+          include: {
+            movie: true,
+            screen: {
+              include: { theater: true },
+            },
+            showSeats: {
+              where: { id: { in: seatIds } },
+              include: { seat: true },
+              orderBy: [
+                { seat: { rowLabel: 'asc' } },
+                { seat: { seatNumber: 'asc' } },
+              ],
+            },
           },
-        },
-      });
+        });
 
-      if (seatIds.length > 0) {
+        if (!show || show.showSeats.length === 0) {
+          throw new Error('Show or selected seats not found.');
+        }
+
+        // 2. Worksheet 3 Concurrency (Cases 2 & 3): Check if already booked
+        const isAnySeatBooked = show.showSeats.some(
+          (ss) => ss.status === SeatStatus.BOOKED
+        );
+        if (isAnySeatBooked) {
+          throw new Error('the seat is already booked select any other seat.');
+        }
+
+        // 3. Find or create user
+        const user = await tx.user.upsert({
+          where: { email },
+          update: {
+            name: userName || email.split('@')[0],
+          },
+          create: {
+            email,
+            name: userName || email.split('@')[0],
+            passwordHash: 'GUEST_CHECKOUT_NO_PWD',
+          },
+        });
+
+        // 4. Create booking record
+        const createdBooking = await tx.booking.create({
+          data: {
+            userId: user.id,
+            showId: show.id,
+            totalAmount,
+            status: BookingStatus.CONFIRMED,
+            showSeats: {
+              connect: show.showSeats.map((ss) => ({ id: ss.id })),
+            },
+          },
+        });
+
+        // 5. Worksheet 3 (Case 1): Permanently freeze seats
         await tx.showSeat.updateMany({
           where: { id: { in: seatIds } },
           data: { status: SeatStatus.BOOKED },
         });
+
+        return { createdBooking, show };
+      },
+      {
+        maxWait: 15000, // 15 seconds to acquire a connection from the pool
+        timeout: 20000, // 20 seconds total execution time before aborting
       }
+    );
 
-      return createdBooking;
-    });
-
-    // Cleanup active Redis locks
+    // 6. Cleanup active Redis locks
     for (const seatId of seatIds) {
-      await redis.del(`lock:show:${showId}:seat:${seatId}`);
+      try {
+        await redis.del(`lock:show:${showId}:seat:${seatId}`);
+      } catch (err) {
+        // Fallback safely if Redis is offline
+      }
     }
 
-    const bookingRef = `CV-${booking.qrCodeToken.substring(0, 6).toUpperCase()}`;
-    const seatLabels = show.showSeats.map((ss) => `${ss.seat.rowLabel}${ss.seat.seatNumber}`);
+    const bookingRef = `CV-${result.createdBooking.qrCodeToken.substring(0, 6).toUpperCase()}`;
+    const seatLabels = result.show.showSeats.map(
+      (ss) => `${ss.seat.rowLabel}${ss.seat.seatNumber}`
+    );
 
-    // Trigger confirmation email asynchronously
+    // Trigger non-blocking confirmation email
     sendTicketConfirmationEmail({
       toEmail: email,
       bookingRef,
-      movieTitle: show.movie.title,
-      theaterName: show.screen.theater.name,
-      screenName: show.screen.name,
-      startTime: show.startTime,
+      movieTitle: result.show.movie.title,
+      theaterName: result.show.screen.theater.name,
+      screenName: result.show.screen.name,
+      startTime: result.show.startTime,
       seats: seatLabels,
       totalAmount,
-    }).catch((err) => console.error('Email dispatch error:', err));
+    }).catch((err) => console.warn('Email dispatch skipped/failed:', err));
 
     return {
-      bookingId: booking.id,
-      bookingRef,
-      movieTitle: show.movie.title,
-      moviePoster: show.movie.posterUrl,
-      format: show.movie.format,
-      theaterName: show.screen.theater.name,
-      screenName: show.screen.name,
-      location: show.screen.theater.location,
-      startTime: show.startTime,
-      seats: seatLabels,
-      totalAmount,
+      success: true,
+      data: {
+        bookingId: result.createdBooking.id,
+        bookingRef,
+        movieTitle: result.show.movie.title,
+        moviePoster: result.show.movie.posterUrl,
+        format: result.show.movie.format,
+        theaterName: result.show.screen.theater.name,
+        screenName: result.show.screen.name,
+        location: result.show.screen.theater.location,
+        startTime: result.show.startTime,
+        seats: seatLabels,
+        totalAmount,
+      },
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Finalize Booking Error:', error);
-    return null;
+    return {
+      success: false,
+      error: error?.message || 'the seat is already booked select any other seat.',
+    };
   }
+}
+
+// Wrapper for checkout view compatibility
+export async function createBookingAction(input: {
+  showId: string;
+  seatIds: string[];
+  userName: string;
+  userEmail: string;
+  userPhone?: string;
+  totalAmount: number;
+}) {
+  const res = await finalizeBookingAction({
+    showId: input.showId,
+    seatIds: input.seatIds,
+    totalAmount: input.totalAmount,
+    customerEmail: input.userEmail,
+    userName: input.userName,
+    userPhone: input.userPhone,
+  });
+
+  if (!res.success || !res.data) {
+    return { success: false, error: res.error };
+  }
+
+  return {
+    success: true,
+    booking: {
+      id: res.data.bookingId,
+      bookingRef: res.data.bookingRef,
+      totalAmount: res.data.totalAmount,
+    },
+  };
 }
 
 export interface UserBookingHistoryItem {
@@ -160,7 +224,6 @@ export async function getUserBookingsAction(
       targetEmail = cookieStore.get('user_email')?.value?.trim().toLowerCase();
     }
 
-    // If an email is provided, fetch ONLY for that user.
     if (!targetEmail) {
       return [];
     }

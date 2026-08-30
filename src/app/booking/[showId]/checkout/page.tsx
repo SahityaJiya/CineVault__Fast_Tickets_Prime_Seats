@@ -1,28 +1,22 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import { 
   ArrowLeft, 
   Clock, 
   ShieldCheck, 
-  CreditCard, 
   Utensils, 
   Plus, 
   Minus,
   Mail,
   AlertTriangle,
-  QrCode,
-  Building2,
-  Lock,
-  CheckCircle2,
-  X,
-  Smartphone,
-  Wallet,
-  Zap,
-  Info
+  Ticket,
+  User,
+  Phone
 } from 'lucide-react';
-import Link from 'next/link';
+import { finalizeBookingAction } from '@/actions/bookings';
+import { unlockSeatsAction } from '@/actions/locking';
 
 interface FoodItem {
   id: string;
@@ -84,16 +78,61 @@ export default function CheckoutPage() {
   const ticketTotal = searchParams.get('total') ? parseFloat(searchParams.get('total')!) : selectedSeatIds.length * 300;
 
   const [fnbCart, setFnbCart] = useState<Record<string, number>>({});
+  const [customerName, setCustomerName] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
-  const [emailError, setEmailError] = useState('');
-  
-  // Razorpay Simulation State
-  const [showRazorpayModal, setShowRazorpayModal] = useState(false);
-  const [rzpTab, setRzpTab] = useState<'upi' | 'card' | 'netbanking' | 'wallet'>('upi');
-  const [selectedUpiApp, setSelectedUpiApp] = useState<'gpay' | 'phonepe' | 'paytm' | 'qr'>('gpay');
-  const [selectedBank, setSelectedBank] = useState('HDFC Bank');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 15-Minute Countdown persisted per session
+  const [timeLeft, setTimeLeft] = useState(15 * 60);
+
+  useEffect(() => {
+    if (!showId) return;
+    const storageKey = `checkout_timer_expiry_${showId}`;
+    const storedExpiry = sessionStorage.getItem(storageKey);
+    let expiry = storedExpiry ? parseInt(storedExpiry, 10) : 0;
+    const now = Date.now();
+
+    if (!expiry || expiry < now) {
+      expiry = now + 15 * 60 * 1000;
+      sessionStorage.setItem(storageKey, expiry.toString());
+    }
+
+    const updateRemaining = () => {
+      const remaining = Math.max(0, Math.floor((expiry - Date.now()) / 1000));
+      setTimeLeft(remaining);
+      if (remaining <= 0) {
+        handleTimeout();
+      }
+    };
+
+    updateRemaining();
+    const timer = setInterval(updateRemaining, 1000);
+    return () => clearInterval(timer);
+  }, [showId]);
+
+  const handleTimeout = async () => {
+    if (showId) sessionStorage.removeItem(`checkout_timer_expiry_${showId}`);
+    if (selectedSeatIds.length > 0) {
+      await unlockSeatsAction(showId, selectedSeatIds);
+    }
+    const cancelMsg = 'transection got canceled try again and seat will be available for another persons at same time without freezing the seat.';
+    router.push(`/booking/${showId}?error=${encodeURIComponent(cancelMsg)}`);
+  };
+
+  const handleCancelBack = async () => {
+    if (showId) sessionStorage.removeItem(`checkout_timer_expiry_${showId}`);
+    if (selectedSeatIds.length > 0) {
+      await unlockSeatsAction(showId, selectedSeatIds);
+    }
+    const cancelMsg = 'transection got canceled try again and seat will be available for another persons at same time without freezing the seat.';
+    router.push(`/booking/${showId}?error=${encodeURIComponent(cancelMsg)}`);
+  };
+
+  const minutes = Math.floor(timeLeft / 60);
+  const seconds = timeLeft % 60;
+  const formattedTime = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 
   const handleAddItem = (id: string) => {
     setFnbCart((prev) => ({
@@ -123,47 +162,57 @@ export default function CheckoutPage() {
   const gst = Math.round((convenienceFee + fnbTotal) * 0.18);
   const grandTotal = ticketTotal + fnbTotal + convenienceFee + gst;
 
-  const handleOpenRazorpay = (e: React.FormEvent) => {
+  const handlePayAtCounter = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!customerEmail.trim() || !customerEmail.includes('@')) {
-      setEmailError('Please enter a valid email address to receive your tickets.');
+      setErrorMessage('Please enter a valid email address.');
       return;
     }
 
-    setEmailError('');
-    setShowRazorpayModal(true);
-  };
+    setErrorMessage('');
+    setIsSubmitting(true);
 
-  const handleExecutePayment = () => {
-    setIsProcessing(true);
+    try {
+      const res = await finalizeBookingAction({
+        showId,
+        seatIds: selectedSeatIds,
+        totalAmount: grandTotal,
+        customerEmail: customerEmail.trim().toLowerCase(),
+        userName: customerName.trim() || customerEmail.split('@')[0],
+        userPhone: customerPhone.trim() || undefined,
+      });
 
-    setTimeout(() => {
-      setIsProcessing(false);
-      setPaymentSuccess(true);
+      if (!res.success || !res.data) {
+        setErrorMessage(res.error || 'the seat is already booked select any other seat.');
+        setIsSubmitting(false);
+        return;
+      }
 
-      setTimeout(() => {
-        const queryParams = new URLSearchParams({
-          showId: showId,
-          seats: selectedSeatIds.join(','),
-          email: customerEmail.trim().toLowerCase(),
-          total: grandTotal.toString(),
-        });
+      if (showId) sessionStorage.removeItem(`checkout_timer_expiry_${showId}`);
 
-        router.push(`/booking/confirmation?${queryParams.toString()}`);
-      }, 1200);
-    }, 1800);
+      const queryParams = new URLSearchParams({
+        showId: showId,
+        bookingRef: res.data.bookingRef,
+      });
+
+      router.push(`/booking/confirmation?${queryParams.toString()}`);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'the seat is already booked select any other seat.');
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
       <header className="sticky top-0 z-30 border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md px-4 sm:px-8 py-3.5 flex items-center justify-between">
-        <Link
-          href={`/booking/${showId}`}
-          className="flex items-center gap-2 text-xs font-semibold text-zinc-400 hover:text-white transition"
+        <button
+          type="button"
+          onClick={handleCancelBack}
+          className="flex items-center gap-2 text-xs font-semibold text-zinc-400 hover:text-white transition cursor-pointer"
         >
           <ArrowLeft className="h-4 w-4" /> Back to Seat Matrix
-        </Link>
+        </button>
         <span className="font-bold text-sm tracking-wide text-zinc-200 uppercase">
           Review & Checkout
         </span>
@@ -171,16 +220,26 @@ export default function CheckoutPage() {
       </header>
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Timer Banner */}
-        <div className="mb-6 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs sm:text-sm flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 text-amber-400 flex-shrink-0" />
-            <span>Your seats are locked for 10 minutes. Please finalize payment.</span>
+        {/* Dynamic Persisted 15-Minute Countdown Banner */}
+        <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs sm:text-sm flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <Clock className="h-5 w-5 text-amber-400 animate-pulse flex-shrink-0" />
+            <div>
+              <p className="font-semibold text-amber-300">Transaction Window: 15 Minutes</p>
+              <p className="text-zinc-400 text-xs">Complete counter booking before timeout or seats will be released.</p>
+            </div>
           </div>
-          <span className="font-mono font-bold px-2.5 py-0.5 rounded bg-amber-500/20 text-amber-200 text-xs">
-            09:30
+          <span className="font-mono font-extrabold px-3 py-1.5 rounded-xl bg-zinc-950 border border-amber-500/40 text-amber-400 text-sm sm:text-base tracking-wider">
+            {formattedTime}
           </span>
         </div>
+
+        {errorMessage && (
+          <div className="mb-6 p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center gap-2.5 text-rose-400 text-sm">
+            <AlertTriangle className="h-5 w-5 flex-shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* F&B Section */}
@@ -248,11 +307,11 @@ export default function CheckoutPage() {
             </div>
           </div>
 
-          {/* Order Summary & Pay Action */}
+          {/* Order Summary & Pay at Counter */}
           <div className="lg:col-span-4">
             <form
-              onSubmit={handleOpenRazorpay}
-              className="p-6 rounded-3xl bg-zinc-900/70 border border-zinc-800 sticky top-20 shadow-2xl space-y-5"
+              onSubmit={handlePayAtCounter}
+              className="p-6 rounded-3xl bg-zinc-900/70 border border-zinc-800 sticky top-20 shadow-2xl space-y-4"
             >
               <div className="space-y-2.5 text-xs text-zinc-300 pb-4 border-b border-zinc-800/80">
                 <div className="flex justify-between">
@@ -281,299 +340,75 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
-                  <Mail className="h-3.5 w-3.5 text-rose-500" /> Email for E-Ticket & Pass
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={customerEmail}
-                  onChange={(e) => {
-                    setCustomerEmail(e.target.value);
-                    if (emailError) setEmailError('');
-                  }}
-                  placeholder="e.g. yourname@gmail.com"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-rose-500 transition"
-                />
-                {emailError && (
-                  <p className="text-[11px] text-rose-400 flex items-center gap-1 mt-1">
-                    <AlertTriangle className="h-3 w-3" /> {emailError}
-                  </p>
-                )}
+              {/* Customer Info */}
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5 mb-1">
+                    <User className="h-3.5 w-3.5 text-rose-500" /> Full Name
+                  </label>
+                  <input
+                    type="text"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    placeholder="Enter customer name"
+                    className="w-full px-3.5 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-rose-500 transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5 mb-1">
+                    <Mail className="h-3.5 w-3.5 text-rose-500" /> Email for Confirmation
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={customerEmail}
+                    onChange={(e) => {
+                      setCustomerEmail(e.target.value);
+                      if (errorMessage) setErrorMessage('');
+                    }}
+                    placeholder="name@example.com"
+                    className="w-full px-3.5 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-rose-500 transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5 mb-1">
+                    <Phone className="h-3.5 w-3.5 text-rose-500" /> Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    placeholder="+91 9876543210"
+                    className="w-full px-3.5 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-rose-500 transition"
+                  />
+                </div>
               </div>
 
-              <div className="pt-2 flex items-center justify-between">
+              <div className="pt-2 flex items-center justify-between border-t border-zinc-800">
                 <span className="text-sm font-medium text-zinc-400">Total Payable</span>
-                <span className="text-xl font-black text-white">₹{grandTotal}</span>
+                <span className="text-xl font-black text-emerald-400">₹{grandTotal}</span>
               </div>
 
+              {/* Single Button: Pay at Counter */}
               <button
                 type="submit"
-                disabled={selectedSeatIds.length === 0}
-                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-bold text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 cursor-pointer disabled:cursor-not-allowed"
+                disabled={selectedSeatIds.length === 0 || isSubmitting}
+                className="w-full py-3.5 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-bold text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-rose-600/20 cursor-pointer disabled:cursor-not-allowed"
               >
-                <Zap className="h-4 w-4 fill-current" />
-                Pay ₹{grandTotal} with Razorpay
+                <Ticket className="h-4 w-4" />
+                {isSubmitting ? 'Reserving Seats...' : 'Pay at Counter'}
               </button>
 
               <div className="flex items-center justify-center gap-1.5 text-[10px] text-zinc-500 pt-1">
                 <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-                <span>Secured by Razorpay • 256-bit SSL Encryption</span>
+                <span>Instant Counter Code Generation & Verification</span>
               </div>
             </form>
           </div>
         </div>
       </main>
-
-      {/* RAZORPAY MODAL SIMULATION */}
-      {showRazorpayModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-[#0c1222] border border-[#1e293b] rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-            
-            {/* Razorpay Top Header */}
-            <div className="bg-[#020617] p-4 sm:p-5 border-b border-[#1e293b] flex items-center justify-between relative">
-              <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-xl bg-blue-600 flex items-center justify-center font-black text-white text-base shadow-lg shadow-blue-500/30">
-                  R
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-white tracking-wide">Razorpay Trusted Business</h3>
-                    <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.2 rounded font-semibold uppercase">Test Mode</span>
-                  </div>
-                  <p className="text-xs text-zinc-400">CineVault Entertainment Pvt Ltd</p>
-                </div>
-              </div>
-
-              <div className="text-right">
-                <span className="text-[11px] text-zinc-400 block">Amount</span>
-                <span className="text-lg font-black text-white">₹{grandTotal}</span>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setShowRazorpayModal(false)}
-                className="absolute right-3 top-3 text-zinc-400 hover:text-white p-1 rounded-lg transition"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            {/* Razorpay Body */}
-            {paymentSuccess ? (
-              <div className="p-10 text-center space-y-3">
-                <div className="h-16 w-16 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 rounded-full flex items-center justify-center mx-auto animate-bounce">
-                  <CheckCircle2 className="h-8 w-8" />
-                </div>
-                <h3 className="text-xl font-black text-white">Payment Successful!</h3>
-                <p className="text-xs text-zinc-400">Razorpay Payment ID: pay_sim_{Math.random().toString(36).substring(2, 10).toUpperCase()}</p>
-                <p className="text-xs text-emerald-400 font-semibold">Generating your movie passes & dispatching email...</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-12 min-h-[340px]">
-                {/* Left Side Navigation Tabs */}
-                <div className="col-span-4 bg-[#090e1a] border-r border-[#1e293b] p-2 space-y-1">
-                  <button
-                    type="button"
-                    onClick={() => setRzpTab('upi')}
-                    className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition ${
-                      rzpTab === 'upi' ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
-                    }`}
-                  >
-                    <Smartphone className="h-3.5 w-3.5" /> UPI Apps
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRzpTab('card')}
-                    className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition ${
-                      rzpTab === 'card' ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
-                    }`}
-                  >
-                    <CreditCard className="h-3.5 w-3.5" /> Cards
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRzpTab('netbanking')}
-                    className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition ${
-                      rzpTab === 'netbanking' ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
-                    }`}
-                  >
-                    <Building2 className="h-3.5 w-3.5" /> Netbanking
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRzpTab('wallet')}
-                    className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition ${
-                      rzpTab === 'wallet' ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
-                    }`}
-                  >
-                    <Wallet className="h-3.5 w-3.5" /> Wallets
-                  </button>
-                </div>
-
-                {/* Right Side Tab Contents */}
-                <div className="col-span-8 p-5 flex flex-col justify-between space-y-4">
-                  
-                  {/* UPI Option */}
-                  {rzpTab === 'upi' && (
-                    <div className="space-y-3">
-                      <span className="text-xs font-bold text-zinc-300 block">Select your Preferred UPI App</span>
-                      
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedUpiApp('gpay')}
-                          className={`p-2.5 rounded-xl border text-xs font-bold flex items-center gap-2 transition ${
-                            selectedUpiApp === 'gpay' ? 'border-blue-500 bg-blue-500/10 text-white' : 'border-[#1e293b] bg-[#020617] text-zinc-400 hover:border-zinc-700'
-                          }`}
-                        >
-                          <span className="h-6 w-6 rounded-full bg-white text-zinc-950 font-black flex items-center justify-center text-[10px]">G</span>
-                          Google Pay
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setSelectedUpiApp('phonepe')}
-                          className={`p-2.5 rounded-xl border text-xs font-bold flex items-center gap-2 transition ${
-                            selectedUpiApp === 'phonepe' ? 'border-blue-500 bg-blue-500/10 text-white' : 'border-[#1e293b] bg-[#020617] text-zinc-400 hover:border-zinc-700'
-                          }`}
-                        >
-                          <span className="h-6 w-6 rounded-full bg-purple-600 text-white font-black flex items-center justify-center text-[10px]">पे</span>
-                          PhonePe
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setSelectedUpiApp('paytm')}
-                          className={`p-2.5 rounded-xl border text-xs font-bold flex items-center gap-2 transition ${
-                            selectedUpiApp === 'paytm' ? 'border-blue-500 bg-blue-500/10 text-white' : 'border-[#1e293b] bg-[#020617] text-zinc-400 hover:border-zinc-700'
-                          }`}
-                        >
-                          <span className="h-6 w-6 rounded-full bg-cyan-500 text-white font-black flex items-center justify-center text-[10px]">P</span>
-                          Paytm UPI
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setSelectedUpiApp('qr')}
-                          className={`p-2.5 rounded-xl border text-xs font-bold flex items-center gap-2 transition ${
-                            selectedUpiApp === 'qr' ? 'border-blue-500 bg-blue-500/10 text-white' : 'border-[#1e293b] bg-[#020617] text-zinc-400 hover:border-zinc-700'
-                          }`}
-                        >
-                          <QrCode className="h-5 w-5 text-zinc-300" />
-                          Dynamic QR
-                        </button>
-                      </div>
-
-                      {selectedUpiApp === 'qr' && (
-                        <div className="p-3 bg-[#020617] border border-[#1e293b] rounded-xl flex items-center gap-3">
-                          <div className="p-1 bg-white rounded-lg">
-                            <QrCode className="h-12 w-12 text-zinc-950" />
-                          </div>
-                          <p className="text-[11px] text-zinc-400">Scan this QR with any UPI app to pay instantly.</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Card Option */}
-                  {rzpTab === 'card' && (
-                    <div className="space-y-2.5 text-xs">
-                      <div>
-                        <label className="text-zinc-400 block mb-1">Card Number (Test Simulation)</label>
-                        <input
-                          type="text"
-                          defaultValue="4532 8900 1234 9876"
-                          disabled
-                          className="w-full px-3 py-2 rounded-lg bg-[#020617] border border-[#1e293b] text-white font-mono"
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-zinc-400 block mb-1">Expiry</label>
-                          <input
-                            type="text"
-                            defaultValue="12/28"
-                            disabled
-                            className="w-full px-3 py-2 rounded-lg bg-[#020617] border border-[#1e293b] text-white font-mono"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-zinc-400 block mb-1">CVV</label>
-                          <input
-                            type="password"
-                            defaultValue="888"
-                            disabled
-                            className="w-full px-3 py-2 rounded-lg bg-[#020617] border border-[#1e293b] text-white font-mono"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* NetBanking Option */}
-                  {rzpTab === 'netbanking' && (
-                    <div className="space-y-2 text-xs">
-                      <label className="text-zinc-400 block">Select Popular Bank</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {['HDFC Bank', 'ICICI Bank', 'SBI', 'Axis Bank'].map((bank) => (
-                          <button
-                            key={bank}
-                            type="button"
-                            onClick={() => setSelectedBank(bank)}
-                            className={`p-2 rounded-lg border text-xs font-semibold text-left transition ${
-                              selectedBank === bank ? 'border-blue-500 bg-blue-500/10 text-white' : 'border-[#1e293b] bg-[#020617] text-zinc-400'
-                            }`}
-                          >
-                            {bank}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Wallets Option */}
-                  {rzpTab === 'wallet' && (
-                    <div className="space-y-2 text-xs">
-                      <label className="text-zinc-400 block">Available Wallets</label>
-                      <div className="p-3 rounded-xl bg-[#020617] border border-[#1e293b] flex items-center justify-between">
-                        <span className="font-bold text-white">Amazon Pay Balance</span>
-                        <span className="text-emerald-400 font-bold">₹5,000 Available</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Razorpay Submit Action */}
-                  <div className="pt-2 border-t border-[#1e293b]">
-                    <button
-                      type="button"
-                      onClick={handleExecutePayment}
-                      disabled={isProcessing}
-                      className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 text-white font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 cursor-pointer"
-                    >
-                      {isProcessing ? (
-                        <>
-                          <div className="h-4 w-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                          Processing with Razorpay...
-                        </>
-                      ) : (
-                        <>
-                          <Lock className="h-4 w-4" /> Pay ₹{grandTotal}
-                        </>
-                      )}
-                    </button>
-                    <div className="flex items-center justify-center gap-1.5 text-[10px] text-zinc-500 mt-2">
-                      <Info className="h-3 w-3 text-blue-400" />
-                      <span>Simulated Razorpay Checkout for Sandbox Testing</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
