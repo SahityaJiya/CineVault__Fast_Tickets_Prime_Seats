@@ -103,16 +103,31 @@ export default function SeatMatrix({ data }: SeatMatrixProps) {
                             const isAvailable = seat.status === SeatStatus.AVAILABLE;
                             const isBooked = seat.status === SeatStatus.BOOKED;
 
+                            if (isBooked) {
+                              return (
+                                <button
+                                  key={seat.id}
+                                  disabled
+                                  aria-label={`Seat ${seat.rowLabel}${seat.seatNumber} is booked`}
+                                  className="relative w-8 h-8 rounded-lg bg-zinc-950 border-2 border-rose-950/80 text-rose-500 font-black text-xs flex items-center justify-center cursor-not-allowed overflow-hidden select-none shadow-inner"
+                                >
+                                  {/* Distinct diagonal stripe pattern */}
+                                  <div className="absolute inset-0 bg-[linear-gradient(45deg,rgba(244,63,94,0.18)_25%,transparent_25%,transparent_50%,rgba(244,63,94,0.18)_50%,rgba(244,63,94,0.18)_75%,transparent_75%,transparent)] bg-[length:7px_7px]" />
+                                  <span className="relative z-10 text-rose-500 text-[11px] font-black">
+                                    ✕
+                                  </span>
+                                </button>
+                              );
+                            }
+
                             return (
                               <button
                                 key={seat.id}
                                 disabled={!isAvailable}
                                 onClick={() => toggleSeatSelection(seat)}
-                                className={`w-8 h-8 rounded-lg text-xs font-bold transition flex items-center justify-center ${
+                                className={`w-8 h-8 rounded-lg text-xs font-bold transition flex items-center justify-center cursor-pointer ${
                                   isSelected
                                     ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30 scale-105 border-rose-500 ring-2 ring-rose-400'
-                                    : isBooked
-                                    ? 'bg-zinc-800/40 text-zinc-600 cursor-not-allowed border border-zinc-800/30'
                                     : 'bg-zinc-900 border border-zinc-700/80 text-zinc-300 hover:border-rose-500 hover:text-white'
                                 }`}
                               >
@@ -135,7 +150,7 @@ export default function SeatMatrix({ data }: SeatMatrixProps) {
         </div>
       </div>
 
-      {/* Legend */}
+      {/* High Visibility Legend */}
       <div className="flex flex-wrap items-center justify-center gap-6 my-6 text-xs text-zinc-400">
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded bg-zinc-900 border border-zinc-700" />
@@ -143,11 +158,14 @@ export default function SeatMatrix({ data }: SeatMatrixProps) {
         </div>
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded bg-rose-600 border border-rose-500 ring-1 ring-rose-400" />
-          <span>Selected</span>
+          <span className="text-white font-medium">Selected</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded bg-zinc-800/40 border border-zinc-800/30" />
-          <span>Occupied</span>
+          <div className="relative w-4 h-4 rounded bg-zinc-950 border-2 border-rose-950 flex items-center justify-center overflow-hidden">
+            <div className="absolute inset-0 bg-[linear-gradient(45deg,rgba(244,63,94,0.25)_25%,transparent_25%,transparent_50%,rgba(244,63,94,0.25)_50%,rgba(244,63,94,0.25)_75%,transparent_75%,transparent)] bg-[length:5px_5px]" />
+            <span className="relative z-10 text-[9px] font-black text-rose-500">✕</span>
+          </div>
+          <span className="text-rose-400/90 font-medium">Booked / Sold Out</span>
         </div>
       </div>
 
@@ -176,7 +194,7 @@ export default function SeatMatrix({ data }: SeatMatrixProps) {
 
             <Link
               href={`/booking/${data.showId}/checkout?seatIds=${selectedSeats.map((s) => s.id).join(',')}`}
-              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm flex items-center justify-center gap-2 transition shadow-lg shadow-rose-600/30"
+              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm flex items-center justify-center gap-2 transition shadow-lg shadow-rose-600/30 cursor-pointer"
             >
               <span>Proceed to Checkout</span>
               <ChevronRight className="h-4 w-4" />

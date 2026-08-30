@@ -35,26 +35,71 @@ export default function CityModal({
     );
   }, [cities, searchQuery]);
 
-  // Geolocation detection handler with fallback
-  const handleDetectLocation = () => {
-    if (!navigator.geolocation) {
-      setStatusMessage("Geolocation is not supported. Selected default city.");
-      const fallback = cities.find((c) => c.slug === "bengaluru") || cities[0];
-      if (fallback) onSelectCity(fallback);
-      return;
-    }
+  // Helper: Find closest match in seeded cities list
+  const findMatchingCity = (query: string): City | null => {
+    if (!query) return null;
+    const cleanQuery = query.toLowerCase().trim();
+    return (
+      cities.find(
+        (c) =>
+          cleanQuery.includes(c.name.toLowerCase()) ||
+          c.name.toLowerCase().includes(cleanQuery) ||
+          cleanQuery.includes(c.slug.toLowerCase())
+      ) || null
+    );
+  };
 
+  // Fallback: IP-based lookup (works reliably across desktop & VPNs)
+  const detectViaIpFallback = async () => {
+    try {
+      const res = await fetch("https://ipapi.co/json/", { cache: "no-store" });
+      const data = await res.json();
+      const detectedCity = data.city || data.region || "";
+
+      const match = findMatchingCity(detectedCity);
+      if (match) {
+        onSelectCity(match);
+        setStatusMessage(`Detected ${detectedCity}. Selected ${match.name}.`);
+        setTimeout(() => onClose(), 800);
+      } else {
+        const fallback = cities.find((c) => c.slug === "chandigarh") || cities[0];
+        if (fallback) {
+          onSelectCity(fallback);
+          setStatusMessage(`Location near ${detectedCity || "your region"}. Set to ${fallback.name}.`);
+        }
+      }
+    } catch {
+      const fallback = cities.find((c) => c.slug === "chandigarh") || cities[0];
+      if (fallback) {
+        onSelectCity(fallback);
+        setStatusMessage(`Set to default city (${fallback.name}).`);
+      }
+    }
+  };
+
+  // Main Geolocation handler
+  const handleDetectLocation = () => {
     setIsDetecting(true);
     setStatusMessage(null);
+
+    if (!navigator.geolocation) {
+      detectViaIpFallback().finally(() => setIsDetecting(false));
+      return;
+    }
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         try {
           const { latitude, longitude } = position.coords;
-          // Reverse geocoding via OpenStreetMap Nominatim
+          
+          // Reverse geocode via OpenStreetMap
           const res = await fetch(
             `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
-            { headers: { "Accept-Language": "en" } }
+            {
+              headers: {
+                "Accept-Language": "en",
+              },
+            }
           );
           const data = await res.json();
           
@@ -65,45 +110,30 @@ export default function CityModal({
             data.address?.state ||
             "";
 
-          // Match detected location name with seeded cities
-          const match = cities.find(
-            (c) =>
-              detectedCityName.toLowerCase().includes(c.name.toLowerCase()) ||
-              c.name.toLowerCase().includes(detectedCityName.toLowerCase())
-          );
+          const match = findMatchingCity(detectedCityName);
 
           if (match) {
             onSelectCity(match);
-            onClose();
+            setStatusMessage(`Location found: ${match.name}`);
+            setTimeout(() => onClose(), 600);
           } else {
-            // Default fallback if current city is not among the 11 seeded hubs
-            const defaultCity = cities.find((c) => c.slug === "bengaluru") || cities[0];
-            if (defaultCity) {
-              onSelectCity(defaultCity);
-              setStatusMessage(`Location near "${detectedCityName || 'Unknown'}". Selected ${defaultCity.name}.`);
-            }
+            // If GPS city isn't in seeded list, fallback to IP detection
+            await detectViaIpFallback();
           }
-        } catch (err) {
-          console.error("Geocoding failed:", err);
-          const fallback = cities.find((c) => c.slug === "bengaluru") || cities[0];
-          if (fallback) onSelectCity(fallback);
+        } catch {
+          await detectViaIpFallback();
         } finally {
           setIsDetecting(false);
         }
       },
-      (error) => {
-        console.warn("Geolocation warning:", error.message);
+      async (error) => {
+        console.warn("Browser GPS unavailable or timed out, trying IP fallback:", error.message);
+        await detectViaIpFallback();
         setIsDetecting(false);
-        // Fallback gracefully without throwing blocking browser alert dialogs
-        const defaultCity = cities.find((c) => c.slug === "bengaluru") || cities[0];
-        if (defaultCity) {
-          onSelectCity(defaultCity);
-          setStatusMessage("Location detection timed out. Set to Bengaluru.");
-        }
       },
       {
-        enableHighAccuracy: false, // Prevents hardware GPS timeout on Linux/Desktops
-        timeout: 6000,
+        enableHighAccuracy: false,
+        timeout: 4000,
         maximumAge: 60000,
       }
     );
@@ -137,7 +167,7 @@ export default function CityModal({
           <div className="relative">
             <input
               type="text"
-              placeholder="Search for your city (e.g. Bengaluru, Mumbai)..."
+              placeholder="Search for your city (e.g. Chandigarh, Delhi, Mumbai)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-zinc-900/80 text-white placeholder-zinc-500 text-sm rounded-xl px-4 py-3 pl-10 border border-zinc-800 focus:outline-none focus:border-red-500/60 transition"
@@ -158,7 +188,7 @@ export default function CityModal({
         <button
           onClick={handleDetectLocation}
           disabled={isDetecting}
-          className="w-full mt-3 flex items-center justify-center gap-2 py-3 rounded-xl bg-red-600/10 text-red-500 hover:bg-red-600 hover:text-white border border-red-500/20 transition-all font-medium text-sm disabled:opacity-50"
+          className="w-full mt-3 flex items-center justify-center gap-2 py-3 rounded-xl bg-red-600/10 text-red-500 hover:bg-red-600 hover:text-white border border-red-500/20 transition-all font-medium text-sm disabled:opacity-50 cursor-pointer"
         >
           <span>🎯</span>
           <span>{isDetecting ? "Detecting location..." : "Detect my current location"}</span>
@@ -193,7 +223,7 @@ export default function CityModal({
                       onSelectCity(city);
                       onClose();
                     }}
-                    className={`px-3.5 py-2.5 text-sm rounded-xl text-left border transition-all flex items-center justify-between ${
+                    className={`px-3.5 py-2.5 text-sm rounded-xl text-left border transition-all flex items-center justify-between cursor-pointer ${
                       isSelected
                         ? "bg-red-600 text-white border-red-500 font-medium shadow-md shadow-red-600/20"
                         : "bg-zinc-900/60 text-zinc-300 border-zinc-800/80 hover:bg-zinc-800 hover:text-white hover:border-zinc-700"

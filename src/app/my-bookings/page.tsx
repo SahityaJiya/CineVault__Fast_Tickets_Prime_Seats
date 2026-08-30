@@ -125,9 +125,20 @@ export default async function MyBookingsPage({ searchParams }: MyBookingsPagePro
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs border-t border-zinc-800/80 pt-4">
                     <div>
                       <span className="text-zinc-500 block mb-1">Date & Time</span>
-                      <span className="font-bold text-white flex items-center gap-1">
-                        <Clock className="h-3.5 w-3.5 text-rose-400" />
-                        {new Date(booking.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      <span className="font-bold text-white flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5 text-rose-400 flex-shrink-0" />
+                        <span>
+                          {new Date(booking.startTime).toLocaleDateString('en-US', {
+                            day: 'numeric',
+                            month: 'short',
+                          })}{' '}
+                          •{' '}
+                          {new Date(booking.startTime).toLocaleTimeString('en-US', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: true,
+                          })}
+                        </span>
                       </span>
                     </div>
 

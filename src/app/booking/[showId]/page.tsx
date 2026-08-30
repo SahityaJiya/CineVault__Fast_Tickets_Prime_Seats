@@ -2,14 +2,18 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getShowSeatMatrix } from '@/actions/seats';
 import SeatMatrix from '@/components/SeatMatrix';
-import { ArrowLeft, Clock, MapPin, Film } from 'lucide-react';
+import { ArrowLeft, Clock, MapPin, Film, AlertCircle } from 'lucide-react';
 
 interface BookingPageProps {
   params: Promise<{ showId: string }>;
+  searchParams?: Promise<{ error?: string }>;
 }
 
-export default async function BookingSeatPage({ params }: BookingPageProps) {
+export default async function BookingSeatPage({ params, searchParams }: BookingPageProps) {
   const { showId } = await params;
+  const sParams = searchParams ? await searchParams : {};
+  const errorMessage = sParams.error;
+
   const showData = await getShowSeatMatrix(showId);
 
   if (!showData) {
@@ -36,6 +40,11 @@ export default async function BookingSeatPage({ params }: BookingPageProps) {
                 <span>{showData.theaterName} ({showData.screenName})</span>
                 <span>•</span>
                 <span className="text-rose-400 font-medium">
+                  {new Date(showData.startTime).toLocaleDateString('en-US', {
+                    day: 'numeric',
+                    month: 'short',
+                  })}{' '}
+                  •{' '}
                   {new Date(showData.startTime).toLocaleTimeString('en-US', {
                     hour: '2-digit',
                     minute: '2-digit',
@@ -52,6 +61,16 @@ export default async function BookingSeatPage({ params }: BookingPageProps) {
           </div>
         </div>
       </header>
+
+      {/* Error / Timeout Banner for Worksheet 3 */}
+      {errorMessage && (
+        <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 pt-4">
+          <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center gap-3 text-rose-400 text-sm">
+            <AlertCircle className="h-5 w-5 flex-shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        </div>
+      )}
 
       {/* Main Seat Matrix View */}
       <main className="flex-1 flex flex-col">
