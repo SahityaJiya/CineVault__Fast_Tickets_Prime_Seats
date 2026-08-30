@@ -1,4 +1,3 @@
-```markdown
 <div align="center">
 
   <h1>🎬 CineVault</h1>
@@ -33,42 +32,49 @@
 
 ## 📑 Table of Contents
 1. [Project Title & Team Details](#-project-title--team-details)
-2. [Selected Theme & Problem Statement](#-selected-theme--problem-statement)
-3. [Solution Overview](#-solution-overview)
-4. [Concurrency Engine & Lock Lifecycle](#-concurrency-engine--lock-lifecycle)
-5. [System Architecture Diagram](#-system-architecture-diagram)
-6. [Technology Stack](#-technology-stack)
-7. [Key Features & Highlights](#-key-features--highlights)
-8. [Installation & Setup Guide](#-installation--setup-guide)
-9. [Environment Variables](#-environment-variables)
-10. [API & Server Actions Documentation](#-api--server-actions-documentation)
-11. [Database Details & Schema](#-database-details--schema)
-12. [Application Interface & Flow Previews](#-application-interface--flow-previews)
-13. [Future Scope](#-future-scope)
+2. [Live Deployment & Demo](#-live-deployment--demo)
+3. [Selected Theme & Problem Statement](#-selected-theme--problem-statement)
+4. [Solution Overview](#-solution-overview)
+5. [Concurrency Engine & Lock Lifecycle](#-concurrency-engine--lock-lifecycle)
+6. [System Architecture Diagram](#-system-architecture-diagram)
+7. [Technology Stack](#-technology-stack)
+8. [Key Features & Highlights](#-key-features--highlights)
+9. [Application Interface & Screenshots](#-application-interface--screenshots)
+10. [Installation & Setup Guide](#-installation--setup-guide)
+11. [Environment Variables](#-environment-variables)
+12. [API & Server Actions Documentation](#-api--server-actions-documentation)
+13. [Database Details & Schema](#-database-details--schema)
+14. [Future Scope](#-future-scope)
 
 ---
 
 ## 👥 Project Title & Team Details
 
 * **Project Title:** CineVault — Fast Tickets, Prime Seats & Atomic Reservation Engine
-* **Repository:** `https://github.com/RIITKAGARWAL/CineVault__Fast_Tickets_Prime_Seats`
+* **Repository:** https://github.com/RIITKAGARWAL/CineVault__Fast_Tickets_Prime_Seats
 
 ### 👥 Team Members
 
 | Role | Member Name | Email Address | GitHub Profile |
 | :--- | :--- | :--- | :--- |
-| **👑 Team Lead / Full-Stack** | **Ritik Agarwal** | `agarwalritik895@gmail.com` | [@RIITKAGARWAL](https://github.com/RIITKAGARWAL) |
-| **⚡ Core Engine Developer** | **Sahitya Jiya** | `sahityajiya1523@gmail.com` | [@SahityaJiya](https://github.com/SahityaJiya) |
+| **👑 Team Lead / Full-Stack** | **Ritik Agarwal** | agarwalritik895@gmail.com | [@RIITKAGARWAL](https://github.com/RIITKAGARWAL) |
+| **⚡ Core Engine Developer** | **Sahitya Jiya** | sahityajiya1523@gmail.com | [@SahityaJiya](https://github.com/SahityaJiya) |
 
 ---
 
+## 🌐 Live Deployment & Demo
+
+* **Production URL:** https://cine-vault-fast-tickets-prime-seats-pc9lxzccl-ritik-dev2.vercel.app/
+* **GitHub Repository:** https://github.com/RIITKAGARWAL/CineVault__Fast_Tickets_Prime_Seats
+
+---
 ## 🎯 Selected Theme & Problem Statement
 
 * **Selected Theme:** Entertainment, Ticketing & High-Concurrency Systems
 * **Problem Statement:** Real-Time Cinema Seat Locking, Collision Prevention & Counter Verification
 
 ### 🌐 Real-World Context
-During blockbuster movie releases or festival rush windows, cinema booking systems experience massive traffic spikes. Multiple users often attempt to select and book the exact same high-demand prime seats simultaneously. 
+During blockbuster movie releases or festival rush windows, cinema booking systems experience massive traffic spikes. Multiple users often attempt to select and book the exact same high-demand prime seats simultaneously.
 
 Without distributed atomic coordination, traditional booking platforms suffer from:
 1. **Double-Booking Collisions:** Two users completing checkout for the same seat at the same second.
@@ -97,36 +103,33 @@ CineVault transforms the cinema reservation experience into an instant, collisio
 
 CineVault handles seat reservation collisions through a 3-stage validation pipeline:
 
-
 ```
-
 [ User Selects Seat ]
-│
-▼
+        │
+        ▼
 [ Check Redis Lock: lock:show:{id}:seat:{id} ]
-├── If Locked by Other ──► Return "Seat is currently on hold"
-└── If Free ────────────► Set 15-Minute Redis Hold (TTL: 900s)
-│
-▼
-[ User Enters Checkout ]
-│
-┌─────────────────────────┴─────────────────────────┐
-▼                                                   ▼
-[ 15-Minute Timeout / Cancel ]                      [ Click "Pay at Counter" ]
-│                                                   │
-▼                                                   ▼
-[ Del Redis Lock & Release ]                         [ Prisma Atomic Transaction ]
-[ Flash: "transection got canceled..." ]             ├── 1. Re-check: Any Seat Status == BOOKED?
-│      └── YES: Throw "the seat is already booked..."
-├── 2. Upsert User by Email
-├── 3. Create Booking Record with Token
-├── 4. Freeze Seats: Status = BOOKED
-└── 5. Evict Redis Temporary Lock
-│
-▼
-[ Render Confirmation Pass ]
-[ "CV-XXXXXX" Counter Code ]
-
+        ├── If Locked by Other ──► Return "Seat is currently on hold"
+        └── If Free ────────────► Set 15-Minute Redis Hold (TTL: 900s)
+                                              │
+                                              ▼
+                                 [ User Enters Checkout ]
+                                              │
+                    ┌─────────────────────────┴─────────────────────────┐
+                    ▼                                                   ▼
+         [ 15-Minute Timeout / Cancel ]                      [ Click "Pay at Counter" ]
+                    │                                                   │
+                    ▼                                                   ▼
+     [ Del Redis Lock & Release ]                         [ Prisma Atomic Transaction ]
+     [ Flash: "transection got canceled..." ]             ├── 1. Re-check: Any Seat Status == BOOKED?
+                                                          │      └── YES: Throw "the seat is already booked..."
+                                                          ├── 2. Upsert User by Email
+                                                          ├── 3. Create Booking Record with Token
+                                                          ├── 4. Freeze Seats: Status = BOOKED
+                                                          └── 5. Evict Redis Temporary Lock
+                                                                        │
+                                                                        ▼
+                                                         [ Render Confirmation Pass ]
+                                                         [ "CV-XXXXXX" Counter Code ]
 ```
 
 ---
@@ -135,24 +138,21 @@ CineVault handles seat reservation collisions through a 3-stage validation pipel
 
 CineVault follows a decoupled modern Server Actions and distributed caching architecture:
 
-
 ```
-
 [ Client Layer: Next.js 15 / React 19 / Tailwind CSS ]
-│
-▼ (Server Actions / HTTPS)
+                      │
+                      ▼ (Server Actions / HTTPS)
 [ Edge / Server Layer (Next.js App Router Server Components) ]
-│
-┌─────────────┴─────────────┐
-▼                           ▼
+                      │
+        ┌─────────────┴─────────────┐
+        ▼                           ▼
 [ Upstash Redis Lock Cluster ]    [ Prisma ORM (Connection Pool) ]
-• TTL Key Locking (15m)           • Multi-Entity Relations
-• Real-Time Seat Matrix Hold      • Atomic $transaction Blocks
-• Non-blocking Del on Commit      • PostgreSQL Serverless (Neon Cloud)
-│
-├──► [ Resend Email API Worker ]
-└──► [ QR Entry Code Generator ]
-
+  • TTL Key Locking (15m)           • Multi-Entity Relations
+  • Real-Time Seat Matrix Hold      • Atomic $transaction Blocks
+  • Non-blocking Del on Commit      • PostgreSQL Serverless (Neon Cloud)
+                                    │
+                                    ├──► [ Resend Email API Worker ]
+                                    └──► [ QR Entry Code Generator ]
 ```
 
 ---
@@ -200,6 +200,34 @@ CineVault follows a decoupled modern Server Actions and distributed caching arch
 
 ---
 
+## 📸 Application Interface & Screenshots
+
+<div align="center">
+
+### 🎬 1. Movie Exploration & Dynamic City Selector
+<img src="public/screenshots/home-page.jpeg" alt="CineVault Home Page" width="850" />
+<p><em>Browse now-showing movies filtered by geolocation city hubs with format badges (IMAX, 4DX, 2D/3D).</em></p>
+
+### 💺 2. Real-Time Interactive Seat Matrix & Legend
+<img src="public/screenshots/seat-matrix.jpeg" alt="Seat Matrix with High Visibility Booked Seats" width="850" />
+<p><em>Tiered cinema layout (Recliner, Prime, Classic) featuring high-contrast sold-out hazard striping and cross markers.</em></p>
+
+### ⏱️ 3. Concession Stand (F&B) & 15-Minute Counter Checkout
+<img src="public/screenshots/checkout-page.jpeg" alt="15-Minute Checkout and F&B Combos" width="850" />
+<p><em>Persistent countdown transaction window with live GST, convenience fee, and single "Pay at Counter" action.</em></p>
+
+### 🎟️ 4. Booking Confirmation Pass & Counter QR Code
+<img src="public/screenshots/booking-confirmation.jpeg" alt="Booking Confirmation and Digital Receipt Pass" width="850" />
+<p><em>Act 1 & Act 2 printable digital boarding pass displaying unique CV reference codes for theater counter verification.</em></p>
+
+### 🎫 5. My Tickets & Verification History
+<img src="public/screenshots/my-bookings.jpeg" alt="My Bookings Ticket History" width="850" />
+<p><em>Searchable ticket pass vault showing verified movie entries, dates, showtimes, and scannable QR tokens.</em></p>
+
+</div>
+
+---
+
 ## 💻 Installation & Setup Guide
 
 ### Prerequisites
@@ -210,45 +238,34 @@ CineVault follows a decoupled modern Server Actions and distributed caching arch
 
 ### 1. Clone the Repository
 ```bash
-git clone [https://github.com/RIITKAGARWAL/CineVault__Fast_Tickets_Prime_Seats.git](https://github.com/RIITKAGARWAL/CineVault__Fast_Tickets_Prime_Seats.git)
+git clone https://github.com/RIITKAGARWAL/CineVault__Fast_Tickets_Prime_Seats.git
 cd CineVault__Fast_Tickets_Prime_Seats
-
 ```
 
 ### 2. Install Dependencies
-
 ```bash
 npm install
-
 ```
 
 ### 3. Configure Environment Variables
-
 Create a `.env` file in the root directory:
-
 ```bash
 cp .env.example .env
-
 ```
 
 ### 4. Database Setup & Migrations
-
 ```bash
 # Push schema to database
 npx prisma db push
 
 # (Optional) Seed initial movies, theaters, screens, and seat layouts
 npx prisma db seed
-
 ```
 
 ### 5. Start Development Server
-
 ```bash
 npm run dev
-
 ```
-
 Open **`http://localhost:3000`** in your browser.
 
 ---
@@ -269,7 +286,6 @@ RESEND_API_KEY="re_sample_api_key_here"
 
 # Application Base URL
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
-
 ```
 
 ---
@@ -281,14 +297,14 @@ CineVault executes all core business operations through Next.js Server Actions:
 ### 1. Booking Actions (`src/actions/bookings.ts`)
 
 | Server Action | Parameters | Description |
-| --- | --- | --- |
+| :--- | :--- | :--- |
 | `finalizeBookingAction` | `{ showId, seatIds, totalAmount, customerEmail, userName }` | Executes atomic Prisma transaction to permanently freeze seats, create booking record, evict Redis locks, and trigger ticket email. |
 | `getUserBookingsAction` | `email?: string` | Retrieves all confirmed bookings and entry passes for a given user email or session cookie. |
 
 ### 2. Seat Matrix & Locking Actions (`src/actions/locking.ts` & `src/actions/seats.ts`)
 
 | Server Action | Parameters | Description |
-| --- | --- | --- |
+| :--- | :--- | :--- |
 | `getShowSeatMatrix` | `showId: string` | Fetches show metadata, theater/screen info, tier pricing, and real-time seat availability. |
 | `lockSeatsAction` | `showId: string, seatIds: string[]` | Acquires 15-minute temporary Redis key holds for selected seats. |
 | `unlockSeatsAction` | `showId: string, seatIds: string[]` | Evicts temporary Redis locks upon cancellation or timeout. |
@@ -296,7 +312,7 @@ CineVault executes all core business operations through Next.js Server Actions:
 ### 3. Geolocation Actions (`src/actions/city.ts`)
 
 | Server Action | Parameters | Description |
-| --- | --- | --- |
+| :--- | :--- | :--- |
 | `getSelectedCityAction` | `None` | Reads the currently active city slug from HTTP cookies. |
 | `selectCityAction` | `slug: string` | Sets the user's active cinema city in cookies for filtered browsing. |
 
@@ -412,7 +428,6 @@ model Booking {
   showSeats   ShowSeat[]
   createdAt   DateTime      @default(now())
 }
-
 ```
 
 ---
@@ -438,7 +453,6 @@ model Booking {
 |------------------------------------------------------------------------------------|
 |  Selected: B3, B4 (2 Tickets) • Total: ₹670              [ Proceed to Checkout -> ]|
 +------------------------------------------------------------------------------------+
-
 ```
 
 ### 🎟️ Booking Confirmation & Entry Pass (Act 1 & Act 2)
@@ -460,7 +474,6 @@ model Booking {
 |  🧾 Show this receipt at the counter to pay and get the ticket.                    |
 |  [ QR CODE SCAN AT GATE ]                                                          |
 +------------------------------------------------------------------------------------+
-
 ```
 
 ---
@@ -473,3 +486,7 @@ model Booking {
 4. **Offline PWA Ticket Wallet:** Service worker caching enabling users to display their QR counter passes and booking barcodes even without active mobile data.
 
 ---
+
+<div align="center">
+  <p>Built with ❤️ by <strong>Team CineVault</strong></p>
+</div>
